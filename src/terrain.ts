@@ -1,8 +1,11 @@
 'use strict';
 import * as d3 from 'd3';
-import { xml } from 'd3';
+import { xml, range } from 'd3';
 type num = number;
-type vec = [num, num];
+interface vec {
+  x: num;
+  y: num;
+}
 type points = vec[];
 type dir = 'N' | 'E' | 'S' | 'W';
 type Primitive = number | string | boolean | Date;
@@ -12,7 +15,8 @@ interface voxelPt {
   height: num;
   neighbours: Map<dir, voxelPt>;
 }
-type size = [num, num];
+type size = { width: num; height: num };
+
 function runif(lo: num, hi: num) {
   return lo + Math.random() * (hi - lo);
 }
@@ -41,24 +45,26 @@ const rnorm = (() => {
 })();
 
 function randomVector(scale: number) {
-  return [scale * rnorm(), scale * rnorm()] as vec;
+  return { x: scale * rnorm(), y: scale * rnorm() } as vec;
 }
 interface extent {
   width: number;
   height: number;
 }
-const defaultSize = [
+const defaultSize = {
   /** Width */
-  100,
+  width: 100,
   /** Height */
-  100,
-] as size;
+  height: 100,
+} as size;
 
 function generatePoints(sz?: size) {
   const size = sz ?? defaultSize;
-  var pts = new Array<voxelPt[]>(size[1]).fill(new Array<voxelPt>(size[0]));
-  d3.range(size[1]).map(y => {
-    d3.range(size[0]).map(x => {
+  var pts = new Array<voxelPt[]>(size.height).fill(
+    new Array<voxelPt>(size.width)
+  );
+  d3.range(size.height).map(y => {
+    d3.range(size.width).map(x => {
       pts[x][y] = {
         x,
         y,
@@ -121,105 +127,144 @@ interface vertexID {
   [i: number]: num;
 }
 interface meshed extends Array<voxelPt[]> {
-  mesh: mesh;
+  mesh: Mesh;
 }
-interface mesh {
-  points: voxelPt[][];
-  size: size;
-  map: (
-    callback: (vx: voxelPt, pos: [num, num], points: voxelPt[][]) => voxelPt
-  ) => meshed;
-}
-function makeMesh(sz?: size) {
-  const size = sz ?? defaultSize;
-  let points = generatePoints(size);
-  const neighbourIndexes = [
-    [-1, 0],
-    [0, -1],
-    [1, 0],
-    [0, 1],
-  ];
-  const dirMap: dir[] = ['W', 'N', 'W', 'S'];
-  map2d(points, (d, x, y) => {
-    neighbourIndexes.map((nIX, i) => {
-      const [nx, ny] = nIX;
-      const [px, py] = [d.x + nx, d.y + ny];
-      if (px < 0 || px > size[0] || py < 0 || py > size[1]) return;
-      d.neighbours.set(dirMap[i], points[px][py]);
+class Mesh {
+  points: number[] = [];
+  size: size = defaultSize;
+  downhill?: vec[];
+  constructor(size?: size, heightMap?: number[]) {
+    if (size) this.size = size;
+    if (heightMap) heightMap.map((i, v) => (this.points[i] = v));
+    else {
+      this.points = range(this.size.width * this.size.height).map(i => 0);
+    }
+  }
+  map(callback: (vx: number, pos: vec, points: number[]) => number) {
+    const newPoints = this.points.map((v, i) => {
+      let vec = this.vecFromInt(i)
+      return callback(v, vec, this.points);
     });
-  });
-  //   var e = vor.edges[i];
-  //   if (e == undefined) continue;
-  //   var e0 = vxids[e[0]];
-  //   var e1 = vxids[e[1]];
-  //   if (e0 == undefined) {
-  //     e0 = vxs.length;
-  //     vxids[e[0]] = e0;
-  //     vxs.push(e[0]);
-  //   }
-  //   if (e1 == undefined) {
-  //     e1 = vxs.length;
-  //     vxids[e[1]] = e1;
-  //     vxs.push(e[1]);
-  //   }
-  //   adj[e0] = adj[e0] || [];
-  //   adj[e0].push(e1);
-  //   adj[e1] = adj[e1] || [];
-  //   adj[e1].push(e0);
-  //   edges.push([e0, e1, e.left, e.right]);
-  //   tris[e0] = tris[e0] || [];
-  //   if (!tris[e0].includes(e.left)) tris[e0].push(e.left);
-  //   if (e.right && !tris[e0].includes(e.right)) tris[e0].push(e.right);
-  //   tris[e1] = tris[e1] || [];
-  //   if (!tris[e1].includes(e.left)) tris[e1].push(e.left);
-  //   if (e.right && !tris[e1].includes(e.right)) tris[e1].push(e.right);
-  // }
+    return new Mesh(this.size, newPoints);
+  }
+  getPoint(x: num|vec, y?: num) {
+    if ( x.hasOwnProperty('x') && !y) return this.points[(x as vec).y * this.size.width + (x as vec).x]; else {
+    return this.points[y! * this.size.width + (x as num)];
+    }
+  }
+  neighbours(x: num, y: num) {
+    const neighbourIndexes = [
+      { x: -1, y: 0 },
+      { x: 0, y: -1 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+    ];
+    const neighbours: vec[] = [];
+    neighbourIndexes.map(({ x: nx, y: ny }) => {
+      const px = x + nx;
+      if (px < 0 || px > this.size.width) return;
+      const py = y + ny;
+      if (py < 0 || py > this.size.height) return;
+      neighbours.push({ x: px, y: py });
+    });
+    return neighbours;
+  }
+  vecFromInt(i:num) {
+    return { 
+      x: i % this.size.width,
+      y: Math.floor(i / this.size.width),
+    } as vec;
+// }
+// function makeMesh(sz?: size) {
+//   const size = sz ?? defaultSize;
+//   let points = generatePoints(size);
+//   const neighbourIndexes = [
+//     [-1, 0],
+//     [0, -1],
+//     [1, 0],
+//     [0, 1],
+//   ];
+//   const dirMap: dir[] = ['W', 'N', 'W', 'S'];
+//   map2d(points, (d, x, y) => {
+//     neighbourIndexes.map((nIX, i) => {
+//       const [nx, ny] = nIX;
+//       const [px, py] = [d.x + nx, d.y + ny];
+//       if (px < 0 || px > size.width || py < 0 || py > size.height) return;
+//       d.neighbours.set(dirMap[i], points[px][py]);
+//     });
+//   });
+//   //   var e = vor.edges[i];
+//   //   if (e == undefined) continue;
+//   //   var e0 = vxids[e[0]];
+//   //   var e1 = vxids[e[1]];
+//   //   if (e0 == undefined) {
+//   //     e0 = vxs.length;
+//   //     vxids[e[0]] = e0;
+//   //     vxs.push(e[0]);
+//   //   }
+//   //   if (e1 == undefined) {
+//   //     e1 = vxs.length;
+//   //     vxids[e[1]] = e1;
+//   //     vxs.push(e[1]);
+//   //   }
+//   //   adj[e0] = adj[e0] || [];
+//   //   adj[e0].push(e1);
+//   //   adj[e1] = adj[e1] || [];
+//   //   adj[e1].push(e0);
+//   //   edges.push([e0, e1, e.left, e.right]);
+//   //   tris[e0] = tris[e0] || [];
+//   //   if (!tris[e0].includes(e.left)) tris[e0].push(e.left);
+//   //   if (e.right && !tris[e0].includes(e.right)) tris[e0].push(e.right);
+//   //   tris[e1] = tris[e1] || [];
+//   //   if (!tris[e1].includes(e.left)) tris[e1].push(e.left);
+//   //   if (e.right && !tris[e1].includes(e.right)) tris[e1].push(e.right);
+//   // }
 
-  let mesh: mesh = {
-    points,
-    size: size,
-    map: f => {
-      let mapped: any = new Array(size[1]).fill(new Array(size[0]));
+//   let mesh: Mesh = {
+//     points,
+//     size: size,
+//     map: f => {
+//       let mapped: any = new Array(size.width).fill(new Array(size.height));
 
-      mapped = points.map((arr, y) =>
-        arr.map((pt, x) => f(pt, [x, y], points))
-      );
-      mapped.mesh = mesh;
+//       mapped = points.map((arr, y) =>
+//         arr.map((pt, x) => f(pt, { x, y }, points))
+//       );
+//       mapped.mesh = mesh;
 
-      return mapped as meshed;
-    },
-  };
+//       return mapped as meshed;
+//     },
+//   };
 
-  return mesh;
-}
+//   return mesh;
+// }
 
 // function generateGoodMesh(n, extent) {
 //   extent = extent || defaultSize;
 //   var pts = generateGoodPoints(n, extent);
 //   return makeMesh(pts, extent);
 // }
-function isedge(mesh: mesh, pos: vec) {
-  return mesh.points[pos[0]][pos[1]].neighbours.size < 4;
+function isedge(mesh: Mesh, pos: vec) {
+  return mesh.neighbours(pos.x, pos.y).length < 4;
 }
 
-function isnearedge(mesh: mesh, [px, py]: vec) {
-  var x = mesh.points[px][py].y;
-  var y = mesh.points[px][py].x;
-  var w = mesh.size[0];
-  var h = mesh.size[1];
+function isnearedge(mesh: Mesh, { x: px, y: py }: vec) {
+  var x = px;
+  var y = py;
+  var w = mesh.size.width;
+  var h = mesh.size.height;
   return x < -0.45 * w || x > 0.45 * w || y < -0.45 * h || y > 0.45 * h;
 }
 
-function neighbours(mesh: mesh, [px, py]: vec) {
-  var onbs = mesh.points[px][py].neighbours;
-  var nbs: voxelPt[] = [];
+function neighbours(mesh: Mesh, { x: px, y: py }: vec) {
+  var onbs = mesh.neighbours(px, py);
+  var nbs: vec[] = [];
   onbs.forEach(nb => nbs.push(nb));
   return nbs;
 }
 
-function distance(mesh: mesh, [ax, ay]: vec, [bx, by]: vec) {
-  var p = mesh.points[ax][ay];
-  var q = mesh.points[bx][by];
+function distance(mesh: Mesh, a: vec, b: vec) {
+  var p = a;
+  var q = b;
   return Math.sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y));
 }
 
@@ -232,74 +277,69 @@ function quantile<T extends any>(h: T[], q: number) {
   return d3.quantile(sortedh, q);
 }
 
-function zero(mesh) {
-  var z = [];
-  for (var i = 0; i < mesh.vxs.length; i++) {
-    z[i] = 0;
-  }
-  z.mesh = mesh;
-  return z;
+function zero(mesh: Mesh) {
+  return mesh.map(vx => 0);
 }
 
-function slope(mesh, direction) {
-  return mesh.map(function(x) {
-    return x[0] * direction[0] + x[1] * direction[1];
+function slope(mesh: Mesh, direction: vec) {
+  return mesh.map((n,p) => {
+    return p.x * direction.x + p.y * direction.y;
   });
 }
 
-function cone(mesh, slope) {
-  return mesh.map(function(x) {
-    return Math.pow(x[0] * x[0] + x[1] * x[1], 0.5) * slope;
+function cone(mesh:Mesh, slope:number) {
+  return mesh.map((v,p)=> {
+    return Math.pow(p.x * p.x + p.y * p.y, 0.5) * slope;
   });
 }
-
-function map(h, f) {
+type meshVxFunc = (vx:number,pos:vec,points:number[]) => number;
+function map(h:Mesh, f:meshVxFunc) {
   var newh = h.map(f);
-  newh.mesh = h.mesh;
   return newh;
 }
 
-function normalize(h) {
-  var lo = d3.min(h);
-  var hi = d3.max(h);
-  return map(h, function(x) {
+function normalize(h:Mesh) {
+  var lo = d3.min(h.points)!;
+  var hi = d3.max(h.points)!;
+  return h.map( x => {
     return (x - lo) / (hi - lo);
   });
 }
 
-function peaky(h) {
-  return map(normalize(h), Math.sqrt);
+function peaky(h:Mesh) {
+  return normalize(h).map( Math.sqrt);
 }
 
-function add() {
-  var n = arguments[0].length;
-  var newvals = zero(arguments[0].mesh);
+function add(...args:Mesh[]) {
+  var n = args[0].points.length;
+  var newvals = zero(arguments[0]);
   for (var i = 0; i < n; i++) {
     for (var j = 0; j < arguments.length; j++) {
-      newvals[i] += arguments[j][i];
+      newvals.points[i] += arguments[j].points[i];
     }
   }
   return newvals;
 }
 
-function mountains(mesh, n, r) {
-  r = r || 0.05;
+function mountains(mesh:Mesh, number:num, radius:num) {
+  radius = radius || 0.05;
   var mounts = [];
-  for (var i = 0; i < n; i++) {
-    mounts.push([
-      mesh.extent.width * (Math.random() - 0.5),
-      mesh.extent.height * (Math.random() - 0.5),
-    ]);
+  for (var i = 0; i < number; i++) {
+    mounts.push({
+      x:mesh.size.width * (Math.random() - 0.5),
+      y:mesh.size.height * (Math.random() - 0.5),
+    });
   }
   var newvals = zero(mesh);
-  for (var i = 0; i < mesh.vxs.length; i++) {
-    var p = mesh.vxs[i];
-    for (var j = 0; j < n; j++) {
+  for (var i = 0; i < mesh.points.length; i++) {
+    var p = mesh.points[i];
+    const {x,y} = mesh.vecFromInt(i);
+    for (var j = 0; j < number; j++) {
       var m = mounts[j];
-      newvals[i] += Math.pow(
+      newvals.points[i] += Math.pow(
         Math.exp(
-          -((p[0] - m[0]) * (p[0] - m[0]) + (p[1] - m[1]) * (p[1] - m[1])) /
-            (2 * r * r)
+          -((x - m.x) * (x - m.x) + (y - m.y) * (y - m.y)) /
+            (2 * radius * radius)
         ),
         2
       );
@@ -308,47 +348,46 @@ function mountains(mesh, n, r) {
   return newvals;
 }
 
-function relax(h) {
-  var newh = zero(h.mesh);
-  for (var i = 0; i < h.length; i++) {
-    var nbs = neighbours(h.mesh, i);
+function relax(h:Mesh) {
+  var newh = zero(h);
+  for (var i = 0; i < h.points.length; i++) {
+    var nbs = neighbours(h, h.vecFromInt(i));
     if (nbs.length < 3) {
-      newh[i] = 0;
+      newh.points[i] = 0;
       continue;
     }
-    newh[i] = d3.mean(
+    newh.points[i] = d3.mean(
       nbs.map(function(j) {
-        return h[j];
+        return h.getPoint(j.x,j.y);
       })
-    );
+    )!;
   }
   return newh;
 }
 
-function downhill(h) {
-  if (h.downhill) return h.downhill;
-  function downfrom(i) {
-    if (isedge(h.mesh, i)) return -2;
-    var best = -1;
-    var besth = h[i];
-    var nbs = neighbours(h.mesh, i);
+function downhill(h:Mesh) {
+  function downfrom(i:vec) {
+    if (isedge(h, i)) return {x:-2000,y:-2000};
+    var best: vec = {x:-1000,y:-1000};
+    var besth = h.getPoint(i.x,i.y);
+    var nbs = neighbours(h, i);
     for (var j = 0; j < nbs.length; j++) {
-      if (h[nbs[j]] < besth) {
-        besth = h[nbs[j]];
+      if (h.getPoint(nbs[j]) < besth) {
+        besth = h.getPoint(nbs[j]);
         best = nbs[j];
       }
     }
     return best;
   }
   var downs = [];
-  for (var i = 0; i < h.length; i++) {
-    downs[i] = downfrom(i);
+  for (var i = 0; i < h.points.length; i++) {
+    downs[i] = downfrom(h.vecFromInt(i));
   }
   h.downhill = downs;
   return downs;
 }
 
-function findSinks(h) {
+function findSinks(h:Mesh) {
   var dh = downhill(h);
   var sinks = [];
   for (var i = 0; i < dh.length; i++) {
