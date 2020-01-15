@@ -129,6 +129,7 @@ interface vertexID {
 interface meshed extends Array<voxelPt[]> {
   mesh: Mesh;
 }
+<<<<<<< HEAD
 interface downhillVx {
   downhillHeight:num;
   downHillPosition: vec;
@@ -139,6 +140,12 @@ class Mesh {
   points: number[] = [];
   size: size = defaultSize;
   downhill?: downhillVx[];
+=======
+class Mesh {
+  points: number[] = [];
+  size: size = defaultSize;
+  downhill?: vec[];
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
   constructor(size?: size, heightMap?: number[]) {
     if (size) this.size = size;
     if (heightMap) heightMap.map((i, v) => (this.points[i] = v));
@@ -146,9 +153,12 @@ class Mesh {
       this.points = range(this.size.width * this.size.height).map(i => 0);
     }
   }
+<<<<<<< HEAD
   get length() {
     return this.points.length
   }
+=======
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
   map(callback: (vx: number, pos: vec, points: number[]) => number) {
     const newPoints = this.points.map((v, i) => {
       let vec = this.vecFromInt(i)
@@ -161,11 +171,14 @@ class Mesh {
     return this.points[y! * this.size.width + (x as num)];
     }
   }
+<<<<<<< HEAD
   getIndex(x: num|vec, y?: num) {
     if ( x.hasOwnProperty('x') && !y) return (x as vec).y * this.size.width + (x as vec).x; else {
     return y! * this.size.width + (x as num);
     }
   }
+=======
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
   neighbours(x: num, y: num) {
     const neighbourIndexes = [
       { x: -1, y: 0 },
@@ -381,6 +394,7 @@ function relax(h:Mesh) {
 
 function downhill(h:Mesh) {
   function downfrom(i:vec) {
+<<<<<<< HEAD
     let cellIsEdge = false;
     let isSink = true;
     if (isedge(h, i)) cellIsEdge = true;
@@ -400,6 +414,21 @@ function downhill(h:Mesh) {
     return {cellIsEdge,downHillPosition:bestPos,downhillHeight:besth,isSink} as downhillVx;
   }
   var downs:downhillVx[] = [];
+=======
+    if (isedge(h, i)) return {x:-2000,y:-2000};
+    var best: vec = {x:-1000,y:-1000};
+    var besth = h.getPoint(i.x,i.y);
+    var nbs = neighbours(h, i);
+    for (var j = 0; j < nbs.length; j++) {
+      if (h.getPoint(nbs[j]) < besth) {
+        besth = h.getPoint(nbs[j]);
+        best = nbs[j];
+      }
+    }
+    return best;
+  }
+  var downs = [];
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
   for (var i = 0; i < h.points.length; i++) {
     downs[i] = downfrom(h.vecFromInt(i));
   }
@@ -411,6 +440,7 @@ function findSinks(h:Mesh) {
   var dh = downhill(h);
   var sinks = [];
   for (var i = 0; i < dh.length; i++) {
+<<<<<<< HEAD
     var node = dh[i];
     while (true) {
       if (node.cellIsEdge) {
@@ -422,10 +452,24 @@ function findSinks(h:Mesh) {
         break;
       }
       node = dh[h.getIndex(node.downHillPosition)];
+=======
+    var node = i;
+    while (true) {
+      if (isedge(h.mesh, node)) {
+        sinks[i] = -2;
+        break;
+      }
+      if (dh[node] == -1) {
+        sinks[i] = node;
+        break;
+      }
+      node = dh[node];
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
     }
   }
 }
 
+<<<<<<< HEAD
 function fillSinks(h:Mesh, epsilon?:number) {
   epsilon = epsilon || 1e-5;
   var infinity = 999999;
@@ -435,11 +479,23 @@ function fillSinks(h:Mesh, epsilon?:number) {
       newh.points[i] = h.points[i];
     } else {
       newh.points[i] = infinity;
+=======
+function fillSinks(h, epsilon) {
+  epsilon = epsilon || 1e-5;
+  var infinity = 999999;
+  var newh = zero(h.mesh);
+  for (var i = 0; i < h.length; i++) {
+    if (isnearedge(h.mesh, i)) {
+      newh[i] = h[i];
+    } else {
+      newh[i] = infinity;
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
     }
   }
   while (true) {
     var changed = false;
     for (var i = 0; i < h.length; i++) {
+<<<<<<< HEAD
       if (newh.points[i] == h.points[i]) continue;
       var nbs = neighbours(h, h.vecFromInt(i));
       for (var j = 0; j < nbs.length; j++) {
@@ -451,6 +507,19 @@ function fillSinks(h:Mesh, epsilon?:number) {
         var oh = newh.getPoint(nbs[j]) + epsilon;
         if (newh.points[i] > oh && oh > h.points[i]) {
           newh.points[i] = oh;
+=======
+      if (newh[i] == h[i]) continue;
+      var nbs = neighbours(h.mesh, i);
+      for (var j = 0; j < nbs.length; j++) {
+        if (h[i] >= newh[nbs[j]] + epsilon) {
+          newh[i] = h[i];
+          changed = true;
+          break;
+        }
+        var oh = newh[nbs[j]] + epsilon;
+        if (newh[i] > oh && oh > h[i]) {
+          newh[i] = oh;
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
           changed = true;
         }
       }
@@ -459,6 +528,7 @@ function fillSinks(h:Mesh, epsilon?:number) {
   }
 }
 
+<<<<<<< HEAD
 function getFlux(h:Mesh) {
   var dh = downhill(h);
   var idxs:number[] = [];
@@ -474,14 +544,37 @@ function getFlux(h:Mesh) {
     var j = idxs[i];
     if (!dh[j].isSink && !dh[j].cellIsEdge) {
       flux.points[h.getIndex(dh[j].downHillPosition)] += flux.points[j];
+=======
+function getFlux(h) {
+  var dh = downhill(h);
+  var idxs = [];
+  var flux = zero(h.mesh);
+  for (var i = 0; i < h.length; i++) {
+    idxs[i] = i;
+    flux[i] = 1 / h.length;
+  }
+  idxs.sort(function(a, b) {
+    return h[b] - h[a];
+  });
+  for (var i = 0; i < h.length; i++) {
+    var j = idxs[i];
+    if (dh[j] >= 0) {
+      flux[dh[j]] += flux[j];
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
     }
   }
   return flux;
 }
 
+<<<<<<< HEAD
 function getSlope(h:Mesh) {
   var dh = downhill(h);
   var slope = zero(h);
+=======
+function getSlope(h) {
+  var dh = downhill(h);
+  var slope = zero(h.mesh);
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
   for (var i = 0; i < h.length; i++) {
     var s = trislope(h, i);
     slope[i] = Math.sqrt(s[0] * s[0] + s[1] * s[1]);
@@ -583,6 +676,7 @@ function cleanCoast(h, iters) {
   return h;
 }
 
+<<<<<<< HEAD
 function trislope(h:Mesh, i:num) {
   var nbs = neighbours(h, h.vecFromInt(i));
   if (nbs.length != 4) return [0, 0];
@@ -590,6 +684,14 @@ function trislope(h:Mesh, i:num) {
   var p1 = nbs[1];
   var p2 = nbs[2];
   var p3 = nbs[3];
+=======
+function trislope(h, i) {
+  var nbs = neighbours(h.mesh, i);
+  if (nbs.length != 3) return [0, 0];
+  var p0 = h.mesh.vxs[nbs[0]];
+  var p1 = h.mesh.vxs[nbs[1]];
+  var p2 = h.mesh.vxs[nbs[2]];
+>>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
 
   var x1 = p1[0] - p0[0];
   var x2 = p2[0] - p0[0];
