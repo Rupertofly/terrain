@@ -1,37 +1,36 @@
-'use strict';
 import * as d3 from 'd3';
-import { xml, range } from 'd3';
 type num = number;
-interface vec {
-  x: num;
-  y: num;
-}
-type points = vec[];
-type dir = 'N' | 'E' | 'S' | 'W';
-type Primitive = number | string | boolean | Date;
-interface voxelPt {
-  x: num;
-  y: num;
-  height: num;
-  neighbours: Map<dir, voxelPt>;
-}
-type size = { width: num; height: num };
-
+type vec = [num, num];
+type pts = vec[];
+type ext = { width: num; height: num };
 function runif(lo: num, hi: num) {
   return lo + Math.random() * (hi - lo);
 }
-
-const rnorm = (() => {
-  let z2: number | null = null;
+interface mesh {
+  pts: pts;
+  vor: d3.VoronoiDiagram<vec>;
+  vxs: pts;
+  adj: num[][];
+  tris: vec[][];
+  edges: [num, num, d3.VoronoiSite<vec>, d3.VoronoiSite<vec>];
+  extent: ext;
+  map: (f: (vx: vec, i: num, arr: pts) => num) => graph;
+}
+interface graph extends Array<number> {
+  mesh: mesh;
+  downhill?: num[];
+}
+var rnorm: () => num = (function() {
+  var z2 = null;
   function rnorm() {
     if (z2 != null) {
-      let tmp = z2;
+      var tmp = z2;
       z2 = null;
       return tmp;
     }
-    let x1 = 0;
-    let x2 = 0;
-    let w = 2.0;
+    var x1 = 0;
+    var x2 = 0;
+    var w = 2.0;
     while (w >= 1) {
       x1 = runif(-1, 1);
       x2 = runif(-1, 1);
@@ -44,258 +43,155 @@ const rnorm = (() => {
   return rnorm;
 })();
 
-function randomVector(scale: number) {
-  return { x: scale * rnorm(), y: scale * rnorm() } as vec;
+function randomVector(scale: num): vec {
+  return [scale * rnorm(), scale * rnorm()];
 }
-interface extent {
-  width: number;
-  height: number;
-}
-const defaultSize = {
-  /** Width */
-  width: 100,
-  /** Height */
-  height: 100,
-} as size;
 
-function generatePoints(sz?: size) {
-  const size = sz ?? defaultSize;
-  var pts = new Array<voxelPt[]>(size.height).fill(
-    new Array<voxelPt>(size.width)
-  );
-  d3.range(size.height).map(y => {
-    d3.range(size.width).map(x => {
-      pts[x][y] = {
-        x,
-        y,
-        height: 0,
-        neighbours: new Map(),
-      };
-    });
-  });
-  // debugger;
+const defaultExtent: ext = {
+  width: 1,
+  height: 1,
+};
+
+function generatePoints(n: num, extent: ext): pts {
+  extent = extent || defaultExtent;
+  var pts = [];
+  for (var i = 0; i < n; i++) {
+    pts.push([
+      (Math.random() - 0.5) * extent.width,
+      (Math.random() - 0.5) * extent.height,
+    ]);
+  }
   return pts;
 }
 
-// function centroid(pts: vec[]) {
-//   var x = 0;
-//   var y = 0;
-//   for (var i = 0; i < pts.length; i++) {
-//     x += pts[i][0];
-//     y += pts[i][1];
-//   }
-//   return [x / pts.length, y / pts.length];
-// }
+function centroid(pts: pts): vec {
+  var x = 0;
+  var y = 0;
+  for (var i = 0; i < pts.length; i++) {
+    x += pts[i][0];
+    y += pts[i][1];
+  }
+  return [x / pts.length, y / pts.length];
+}
 
-// function improvePoints(pts: points, n: number, extent: extent) {
-//   n = n || 1;
-//   let expPoints: points;
-//   extent = extent || defaultSize;
-//   for (var i = 0; i < n; i++) {
-//     expPoints = terVoroni(pts, extent)
-//       .polygons()
-//       .map(centroid) as vec[];
-//   }
-//   return pts;
-// }
+function improvePoints(pts: pts, n: num, extent: ext) {
+  n = n || 1;
+  extent = extent || defaultExtent;
+  for (var i = 0; i < n; i++) {
+    pts = voronoi(pts, extent)
+      .polygons()
+      .map(centroid);
+  }
+  return pts;
+}
 
-// function generateGoodPoints(n: number, extent: extent) {
-//   extent = extent || defaultSize;
-//   var pts = generatePoints(n, extent);
-//   pts = pts.sort(function(a, b) {
-//     return a[0] - b[0];
-//   });
-//   return improvePoints(pts, 1, extent);
-// }
+function generateGoodPoints(n: num, extent: ext) {
+  extent = extent || defaultExtent;
+  var pts = generatePoints(n, extent);
+  pts = pts.sort(function(a, b) {
+    return a[0] - b[0];
+  });
+  return improvePoints(pts, 1, extent);
+}
 
-// function terVoroni(pts: points, extent: extent) {
-//   extent = extent || defaultSize;
-//   var w = extent.width;
-//   var h = extent.height;
-//   return d3.voronoi().extent([
-//     [0, 0],
-//     [w, h],
-//   ])(pts);
-// }
-function map2d<T>(
-  matrix: T[][],
-  callback: (data: T, x: num, y: num) => T | void
-) {
-  return matrix.map((arr, y) => arr.map((value, x) => callback(value, x, y)));
+function voronoi(pts: pts, extent: ext) {
+  extent = extent || defaultExtent;
+  var w = extent.width / 2;
+  var h = extent.height / 2;
+  return d3.voronoi().extent([
+    [-w, -h],
+    [w, h],
+  ])(pts);
 }
-interface vertexID {
-  [i: number]: num;
-}
-interface meshed extends Array<voxelPt[]> {
-  mesh: Mesh;
-}
-<<<<<<< HEAD
-interface downhillVx {
-  downhillHeight:num;
-  downHillPosition: vec;
-  cellIsEdge: boolean;
-  isSink:boolean
-}
-class Mesh {
-  points: number[] = [];
-  size: size = defaultSize;
-  downhill?: downhillVx[];
-=======
-class Mesh {
-  points: number[] = [];
-  size: size = defaultSize;
-  downhill?: vec[];
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
-  constructor(size?: size, heightMap?: number[]) {
-    if (size) this.size = size;
-    if (heightMap) heightMap.map((i, v) => (this.points[i] = v));
-    else {
-      this.points = range(this.size.width * this.size.height).map(i => 0);
+
+function makeMesh(pts: pts, extent: ext): mesh {
+  extent = extent || defaultExtent;
+  var vor = voronoi(pts, extent);
+  var vxs = [];
+  var vxids = {};
+  var adj = [];
+  var edges = [];
+  var tris = [];
+  for (var i = 0; i < vor.edges.length; i++) {
+    var e = vor.edges[i];
+    if (e == undefined) continue;
+    var e0 = vxids[e[0] as any];
+    var e1 = vxids[e[1] as any];
+    if (e0 == undefined) {
+      e0 = vxs.length;
+      vxids[e[0] as any] = e0;
+      vxs.push(e[0]);
     }
-  }
-<<<<<<< HEAD
-  get length() {
-    return this.points.length
-  }
-=======
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
-  map(callback: (vx: number, pos: vec, points: number[]) => number) {
-    const newPoints = this.points.map((v, i) => {
-      let vec = this.vecFromInt(i)
-      return callback(v, vec, this.points);
-    });
-    return new Mesh(this.size, newPoints);
-  }
-  getPoint(x: num|vec, y?: num) {
-    if ( x.hasOwnProperty('x') && !y) return this.points[(x as vec).y * this.size.width + (x as vec).x]; else {
-    return this.points[y! * this.size.width + (x as num)];
+    if (e1 == undefined) {
+      e1 = vxs.length;
+      vxids[e[1] as any] = e1;
+      vxs.push(e[1]);
     }
+    adj[e0] = adj[e0] || [];
+    adj[e0].push(e1);
+    adj[e1] = adj[e1] || [];
+    adj[e1].push(e0);
+    edges.push([e0, e1, e.left, e.right]);
+    tris[e0] = tris[e0] || [];
+    if (!tris[e0].includes(e.left)) tris[e0].push(e.left);
+    if (e.right && !tris[e0].includes(e.right)) tris[e0].push(e.right);
+    tris[e1] = tris[e1] || [];
+    if (!tris[e1].includes(e.left)) tris[e1].push(e.left);
+    if (e.right && !tris[e1].includes(e.right)) tris[e1].push(e.right);
   }
-<<<<<<< HEAD
-  getIndex(x: num|vec, y?: num) {
-    if ( x.hasOwnProperty('x') && !y) return (x as vec).y * this.size.width + (x as vec).x; else {
-    return y! * this.size.width + (x as num);
-    }
-  }
-=======
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
-  neighbours(x: num, y: num) {
-    const neighbourIndexes = [
-      { x: -1, y: 0 },
-      { x: 0, y: -1 },
-      { x: 1, y: 0 },
-      { x: 0, y: 1 },
-    ];
-    const neighbours: vec[] = [];
-    neighbourIndexes.map(({ x: nx, y: ny }) => {
-      const px = x + nx;
-      if (px < 0 || px > this.size.width) return;
-      const py = y + ny;
-      if (py < 0 || py > this.size.height) return;
-      neighbours.push({ x: px, y: py });
-    });
-    return neighbours;
-  }
-  vecFromInt(i:num) {
-    return { 
-      x: i % this.size.width,
-      y: Math.floor(i / this.size.width),
-    } as vec;
-// }
-// function makeMesh(sz?: size) {
-//   const size = sz ?? defaultSize;
-//   let points = generatePoints(size);
-//   const neighbourIndexes = [
-//     [-1, 0],
-//     [0, -1],
-//     [1, 0],
-//     [0, 1],
-//   ];
-//   const dirMap: dir[] = ['W', 'N', 'W', 'S'];
-//   map2d(points, (d, x, y) => {
-//     neighbourIndexes.map((nIX, i) => {
-//       const [nx, ny] = nIX;
-//       const [px, py] = [d.x + nx, d.y + ny];
-//       if (px < 0 || px > size.width || py < 0 || py > size.height) return;
-//       d.neighbours.set(dirMap[i], points[px][py]);
-//     });
-//   });
-//   //   var e = vor.edges[i];
-//   //   if (e == undefined) continue;
-//   //   var e0 = vxids[e[0]];
-//   //   var e1 = vxids[e[1]];
-//   //   if (e0 == undefined) {
-//   //     e0 = vxs.length;
-//   //     vxids[e[0]] = e0;
-//   //     vxs.push(e[0]);
-//   //   }
-//   //   if (e1 == undefined) {
-//   //     e1 = vxs.length;
-//   //     vxids[e[1]] = e1;
-//   //     vxs.push(e[1]);
-//   //   }
-//   //   adj[e0] = adj[e0] || [];
-//   //   adj[e0].push(e1);
-//   //   adj[e1] = adj[e1] || [];
-//   //   adj[e1].push(e0);
-//   //   edges.push([e0, e1, e.left, e.right]);
-//   //   tris[e0] = tris[e0] || [];
-//   //   if (!tris[e0].includes(e.left)) tris[e0].push(e.left);
-//   //   if (e.right && !tris[e0].includes(e.right)) tris[e0].push(e.right);
-//   //   tris[e1] = tris[e1] || [];
-//   //   if (!tris[e1].includes(e.left)) tris[e1].push(e.left);
-//   //   if (e.right && !tris[e1].includes(e.right)) tris[e1].push(e.right);
-//   // }
 
-//   let mesh: Mesh = {
-//     points,
-//     size: size,
-//     map: f => {
-//       let mapped: any = new Array(size.width).fill(new Array(size.height));
-
-//       mapped = points.map((arr, y) =>
-//         arr.map((pt, x) => f(pt, { x, y }, points))
-//       );
-//       mapped.mesh = mesh;
-
-//       return mapped as meshed;
-//     },
-//   };
-
-//   return mesh;
-// }
-
-// function generateGoodMesh(n, extent) {
-//   extent = extent || defaultSize;
-//   var pts = generateGoodPoints(n, extent);
-//   return makeMesh(pts, extent);
-// }
-function isedge(mesh: Mesh, pos: vec) {
-  return mesh.neighbours(pos.x, pos.y).length < 4;
+  var mesh: any = {
+    pts: pts,
+    vor: vor,
+    vxs: vxs,
+    adj: adj,
+    tris: tris,
+    edges: edges,
+    extent: extent,
+  };
+  mesh.map = function(f: (vx: vec, i: num, arr: pts) => num) {
+    var mapped = vxs.map(f) as any;
+    mapped.mesh = mesh;
+    return mapped;
+  };
+  return mesh;
 }
 
-function isnearedge(mesh: Mesh, { x: px, y: py }: vec) {
-  var x = px;
-  var y = py;
-  var w = mesh.size.width;
-  var h = mesh.size.height;
+function generateGoodMesh(n: num, extent: ext) {
+  extent = extent || defaultExtent;
+  var pts = generateGoodPoints(n, extent);
+  return makeMesh(pts, extent);
+}
+function isedge(mesh: mesh, i: num) {
+  return mesh.adj[i].length < 3;
+}
+
+function isnearedge(mesh: mesh, i: num) {
+  var x = mesh.vxs[i][0];
+  var y = mesh.vxs[i][1];
+  var w = mesh.extent.width;
+  var h = mesh.extent.height;
   return x < -0.45 * w || x > 0.45 * w || y < -0.45 * h || y > 0.45 * h;
 }
 
-function neighbours(mesh: Mesh, { x: px, y: py }: vec) {
-  var onbs = mesh.neighbours(px, py);
-  var nbs: vec[] = [];
-  onbs.forEach(nb => nbs.push(nb));
+function neighbours(mesh: mesh, i: num): num[] {
+  var onbs = mesh.adj[i];
+  var nbs = [];
+  for (var i = 0; i < onbs.length; i++) {
+    nbs.push(onbs[i]);
+  }
   return nbs;
 }
 
-function distance(mesh: Mesh, a: vec, b: vec) {
-  var p = a;
-  var q = b;
-  return Math.sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y));
+function distance(mesh: mesh, i: num, j: num) {
+  var p = mesh.vxs[i];
+  var q = mesh.vxs[j];
+  return Math.sqrt(
+    (p[0] - q[0]) * (p[0] - q[0]) + (p[1] - q[1]) * (p[1] - q[1])
+  );
 }
 
-function quantile<T extends any>(h: T[], q: number) {
+function quantile(h: Array<num>, q: num) {
   var sortedh = [];
   for (var i = 0; i < h.length; i++) {
     sortedh[i] = h[i];
@@ -304,69 +200,74 @@ function quantile<T extends any>(h: T[], q: number) {
   return d3.quantile(sortedh, q);
 }
 
-function zero(mesh: Mesh) {
-  return mesh.map(vx => 0);
+function zero(mesh: mesh): graph {
+  var z: any = [];
+  for (var i = 0; i < mesh.vxs.length; i++) {
+    z[i] = 0;
+  }
+  z.mesh = mesh;
+  return z as graph;
 }
 
-function slope(mesh: Mesh, direction: vec) {
-  return mesh.map((n,p) => {
-    return p.x * direction.x + p.y * direction.y;
+function slope(mesh: mesh, direction: vec) {
+  return mesh.map(function(x) {
+    return x[0] * direction[0] + x[1] * direction[1];
   });
 }
 
-function cone(mesh:Mesh, slope:number) {
-  return mesh.map((v,p)=> {
-    return Math.pow(p.x * p.x + p.y * p.y, 0.5) * slope;
+function cone(mesh: mesh, slope: number) {
+  return mesh.map(function(x) {
+    return Math.pow(x[0] * x[0] + x[1] * x[1], 0.5) * slope;
   });
 }
-type meshVxFunc = (vx:number,pos:vec,points:number[]) => number;
-function map(h:Mesh, f:meshVxFunc) {
-  var newh = h.map(f);
+
+function map(h: graph, f: (vx: num, i: num, arr: num[]) => num): graph {
+  var newh: any = h.map(f);
+  newh.mesh = h.mesh;
   return newh;
 }
 
-function normalize(h:Mesh) {
-  var lo = d3.min(h.points)!;
-  var hi = d3.max(h.points)!;
-  return h.map( x => {
+function normalize(h: graph) {
+  var lo = d3.min(h);
+  var hi = d3.max(h);
+  return map(h, function(x) {
     return (x - lo) / (hi - lo);
   });
 }
 
-function peaky(h:Mesh) {
-  return normalize(h).map( Math.sqrt);
+function peaky(h: graph) {
+  return map(normalize(h), Math.sqrt);
 }
 
-function add(...args:Mesh[]) {
-  var n = args[0].points.length;
-  var newvals = zero(arguments[0]);
+function add(...args: graph[]) {
+  var n = args[0].length;
+  var newvals = zero(args[0].mesh);
   for (var i = 0; i < n; i++) {
-    for (var j = 0; j < arguments.length; j++) {
-      newvals.points[i] += arguments[j].points[i];
+    for (var j = 0; j < args.length; j++) {
+      newvals[i] += args[j][i];
     }
   }
   return newvals;
 }
 
-function mountains(mesh:Mesh, number:num, radius:num) {
-  radius = radius || 0.05;
+function mountains(mesh: mesh, n: num, r: num) {
+  r = r || 0.05;
   var mounts = [];
-  for (var i = 0; i < number; i++) {
-    mounts.push({
-      x:mesh.size.width * (Math.random() - 0.5),
-      y:mesh.size.height * (Math.random() - 0.5),
-    });
+  for (var i = 0; i < n; i++) {
+    mounts.push([
+      mesh.extent.width * (Math.random() - 0.5),
+      mesh.extent.height * (Math.random() - 0.5),
+    ]);
   }
   var newvals = zero(mesh);
-  for (var i = 0; i < mesh.points.length; i++) {
-    var p = mesh.points[i];
-    const {x,y} = mesh.vecFromInt(i);
-    for (var j = 0; j < number; j++) {
+  for (var i = 0; i < mesh.vxs.length; i++) {
+    var p = mesh.vxs[i];
+    for (var j = 0; j < n; j++) {
       var m = mounts[j];
-      newvals.points[i] += Math.pow(
+      newvals[i] += Math.pow(
         Math.exp(
-          -((x - m.x) * (x - m.x) + (y - m.y) * (y - m.y)) /
-            (2 * radius * radius)
+          -((p[0] - m[0]) * (p[0] - m[0]) + (p[1] - m[1]) * (p[1] - m[1])) /
+            (2 * r * r)
         ),
         2
       );
@@ -375,84 +276,50 @@ function mountains(mesh:Mesh, number:num, radius:num) {
   return newvals;
 }
 
-function relax(h:Mesh) {
-  var newh = zero(h);
-  for (var i = 0; i < h.points.length; i++) {
-    var nbs = neighbours(h, h.vecFromInt(i));
+function relax(h: graph) {
+  var newh = zero(h.mesh);
+  for (var i = 0; i < h.length; i++) {
+    var nbs = neighbours(h.mesh, i);
     if (nbs.length < 3) {
-      newh.points[i] = 0;
+      newh[i] = 0;
       continue;
     }
-    newh.points[i] = d3.mean(
+    newh[i] = d3.mean(
       nbs.map(function(j) {
-        return h.getPoint(j.x,j.y);
+        return h[j];
       })
-    )!;
+    );
   }
   return newh;
 }
 
-function downhill(h:Mesh) {
-  function downfrom(i:vec) {
-<<<<<<< HEAD
-    let cellIsEdge = false;
-    let isSink = true;
-    if (isedge(h, i)) cellIsEdge = true;
-    var bestPos: vec = {x:-1,y:-1};
-    var besth = h.getPoint(i.x,i.y);
-    var nbs = neighbours(h, i);
-    if (!cellIsEdge){
-      for (var j = 0; j < nbs.length; j++) {
-        if (h.getPoint(nbs[j]) < besth) {
-        besth = h.getPoint(nbs[j]);
-        bestPos = nbs[j];
-        isSink = false;
-        }
-      }
-    }
-    
-    return {cellIsEdge,downHillPosition:bestPos,downhillHeight:besth,isSink} as downhillVx;
-  }
-  var downs:downhillVx[] = [];
-=======
-    if (isedge(h, i)) return {x:-2000,y:-2000};
-    var best: vec = {x:-1000,y:-1000};
-    var besth = h.getPoint(i.x,i.y);
-    var nbs = neighbours(h, i);
+function downhill(h: graph) {
+  if (h.downhill) return h.downhill;
+  function downfrom(i: num) {
+    if (isedge(h.mesh, i)) return -2;
+    var best = -1;
+    var besth = h[i];
+    var nbs = neighbours(h.mesh, i);
     for (var j = 0; j < nbs.length; j++) {
-      if (h.getPoint(nbs[j]) < besth) {
-        besth = h.getPoint(nbs[j]);
+      if (h[nbs[j]] < besth) {
+        besth = h[nbs[j]];
         best = nbs[j];
       }
     }
     return best;
   }
-  var downs = [];
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
-  for (var i = 0; i < h.points.length; i++) {
-    downs[i] = downfrom(h.vecFromInt(i));
+  var downs: number[] = [];
+  for (var i = 0; i < h.length; i++) {
+    downs[i] = downfrom(i);
   }
   h.downhill = downs;
   return downs;
 }
 
-function findSinks(h:Mesh) {
+function findSinks(h: graph) {
   var dh = downhill(h);
-  var sinks = [];
+  var sinks: num[] = [];
   for (var i = 0; i < dh.length; i++) {
-<<<<<<< HEAD
-    var node = dh[i];
-    while (true) {
-      if (node.cellIsEdge) {
-        sinks[i] = -2;
-        break;
-      }
-      if (node.isSink) {
-        sinks[i] = node;
-        break;
-      }
-      node = dh[h.getIndex(node.downHillPosition)];
-=======
     var node = i;
     while (true) {
       if (isedge(h.mesh, node)) {
@@ -464,23 +331,11 @@ function findSinks(h:Mesh) {
         break;
       }
       node = dh[node];
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
     }
   }
 }
 
-<<<<<<< HEAD
-function fillSinks(h:Mesh, epsilon?:number) {
-  epsilon = epsilon || 1e-5;
-  var infinity = 999999;
-  var newh = zero(h);
-  for (var i = 0; i < h.length; i++) {
-    if (isnearedge(h, h.vecFromInt(i))) {
-      newh.points[i] = h.points[i];
-    } else {
-      newh.points[i] = infinity;
-=======
-function fillSinks(h, epsilon) {
+function fillSinks(h: graph, epsilon?: num) {
   epsilon = epsilon || 1e-5;
   var infinity = 999999;
   var newh = zero(h.mesh);
@@ -489,25 +344,11 @@ function fillSinks(h, epsilon) {
       newh[i] = h[i];
     } else {
       newh[i] = infinity;
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
     }
   }
   while (true) {
     var changed = false;
     for (var i = 0; i < h.length; i++) {
-<<<<<<< HEAD
-      if (newh.points[i] == h.points[i]) continue;
-      var nbs = neighbours(h, h.vecFromInt(i));
-      for (var j = 0; j < nbs.length; j++) {
-        if (h.points[i] >= newh.getPoint(nbs[j]) + epsilon) {
-          newh.points[i] = h.points[i];
-          changed = true;
-          break;
-        }
-        var oh = newh.getPoint(nbs[j]) + epsilon;
-        if (newh.points[i] > oh && oh > h.points[i]) {
-          newh.points[i] = oh;
-=======
       if (newh[i] == h[i]) continue;
       var nbs = neighbours(h.mesh, i);
       for (var j = 0; j < nbs.length; j++) {
@@ -519,7 +360,6 @@ function fillSinks(h, epsilon) {
         var oh = newh[nbs[j]] + epsilon;
         if (newh[i] > oh && oh > h[i]) {
           newh[i] = oh;
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
           changed = true;
         }
       }
@@ -528,24 +368,7 @@ function fillSinks(h, epsilon) {
   }
 }
 
-<<<<<<< HEAD
-function getFlux(h:Mesh) {
-  var dh = downhill(h);
-  var idxs:number[] = [];
-  var flux = zero(h);
-  for (var i = 0; i < h.length; i++) {
-    idxs[i] = i;
-    flux.points[i] = 1 / h.length;
-  }
-  idxs.sort(function(a, b) {
-    return h.points[b] - h.points[a];
-  });
-  for (var i = 0; i < h.length; i++) {
-    var j = idxs[i];
-    if (!dh[j].isSink && !dh[j].cellIsEdge) {
-      flux.points[h.getIndex(dh[j].downHillPosition)] += flux.points[j];
-=======
-function getFlux(h) {
+function getFlux(h: graph) {
   var dh = downhill(h);
   var idxs = [];
   var flux = zero(h.mesh);
@@ -560,21 +383,14 @@ function getFlux(h) {
     var j = idxs[i];
     if (dh[j] >= 0) {
       flux[dh[j]] += flux[j];
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
     }
   }
   return flux;
 }
 
-<<<<<<< HEAD
-function getSlope(h:Mesh) {
-  var dh = downhill(h);
-  var slope = zero(h);
-=======
-function getSlope(h) {
+function getSlope(h: graph) {
   var dh = downhill(h);
   var slope = zero(h.mesh);
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
   for (var i = 0; i < h.length; i++) {
     var s = trislope(h, i);
     slope[i] = Math.sqrt(s[0] * s[0] + s[1] * s[1]);
@@ -588,7 +404,7 @@ function getSlope(h) {
   return slope;
 }
 
-function erosionRate(h) {
+function erosionRate(h: graph) {
   var flux = getFlux(h);
   var slope = getSlope(h);
   var newh = zero(h.mesh);
@@ -602,7 +418,7 @@ function erosionRate(h) {
   return newh;
 }
 
-function erode(h, amount) {
+function erode(h: graph, amount: num) {
   var er = erosionRate(h);
   var newh = zero(h.mesh);
   var maxr = d3.max(er);
@@ -612,7 +428,7 @@ function erode(h, amount) {
   return newh;
 }
 
-function doErosion(h, amount, n) {
+function doErosion(h: graph, amount: num, n: num) {
   n = n || 1;
   h = fillSinks(h);
   for (var i = 0; i < n; i++) {
@@ -622,7 +438,7 @@ function doErosion(h, amount, n) {
   return h;
 }
 
-function setSeaLevel(h, q) {
+function setSeaLevel(h: graph, q: num) {
   var newh = zero(h.mesh);
   var delta = quantile(h, q);
   for (var i = 0; i < h.length; i++) {
@@ -631,7 +447,7 @@ function setSeaLevel(h, q) {
   return newh;
 }
 
-function cleanCoast(h, iters) {
+function cleanCoast(h: graph, iters: num) {
   for (var iter = 0; iter < iters; iter++) {
     var changed = 0;
     var newh = zero(h.mesh);
@@ -676,22 +492,12 @@ function cleanCoast(h, iters) {
   return h;
 }
 
-<<<<<<< HEAD
-function trislope(h:Mesh, i:num) {
-  var nbs = neighbours(h, h.vecFromInt(i));
-  if (nbs.length != 4) return [0, 0];
-  var p0 = nbs[0];
-  var p1 = nbs[1];
-  var p2 = nbs[2];
-  var p3 = nbs[3];
-=======
-function trislope(h, i) {
+function trislope(h: graph, i: num): vec {
   var nbs = neighbours(h.mesh, i);
   if (nbs.length != 3) return [0, 0];
   var p0 = h.mesh.vxs[nbs[0]];
   var p1 = h.mesh.vxs[nbs[1]];
   var p2 = h.mesh.vxs[nbs[2]];
->>>>>>> 7fef4b6936355ad97801e9745a85bf3188895177
 
   var x1 = p1[0] - p0[0];
   var x2 = p2[0] - p0[0];
@@ -705,7 +511,7 @@ function trislope(h, i) {
   return [(y2 * h1 - y1 * h2) / det, (-x2 * h1 + x1 * h2) / det];
 }
 
-function cityScore(h, cities) {
+function cityScore(h: graph, cities: num[]) {
   var score = map(getFlux(h), Math.sqrt);
   for (var i = 0; i < h.length; i++) {
     if (h[i] <= 0 || isnearedge(h.mesh, i)) {
@@ -738,7 +544,7 @@ function placeCities(render) {
   }
 }
 
-function contour(h, level) {
+function contour(h: graph, level) {
   level = level || 0;
   var edges = [];
   for (var i = 0; i < h.mesh.edges.length; i++) {
@@ -755,7 +561,7 @@ function contour(h, level) {
   return mergeSegments(edges);
 }
 
-function getRivers(h, limit) {
+function getRivers(h: graph, limit) {
   var dh = downhill(h);
   var flux = getFlux(h);
   var links = [];
@@ -778,14 +584,14 @@ function getRivers(h, limit) {
   }
   return mergeSegments(links).map(relaxPath);
 }
-
+const PriorityQueue: any = {};
 function getTerritories(render) {
   var h = render.h;
   var cities = render.cities;
   var n = render.params.nterrs;
   if (n > render.cities.length) n = render.cities.length;
   var flux = getFlux(h);
-  var terr = [];
+  var terr: any = [];
   var queue = new PriorityQueue({
     comparator: function(a, b) {
       return a.score - b.score;
@@ -930,475 +736,475 @@ function visualizePoints(svg, pts) {
     .attr('r', 100 / Math.sqrt(pts.length));
 }
 
-// function makeD3Path(path) {
-//   var p = d3.path();
-//   p.moveTo(1000 * path[0][0], 1000 * path[0][1]);
-//   for (var i = 1; i < path.length; i++) {
-//     p.lineTo(1000 * path[i][0], 1000 * path[i][1]);
-//   }
-//   return p.toString();
-// }
+function makeD3Path(path) {
+  var p = d3.path();
+  p.moveTo(1000 * path[0][0], 1000 * path[0][1]);
+  for (var i = 1; i < path.length; i++) {
+    p.lineTo(1000 * path[i][0], 1000 * path[i][1]);
+  }
+  return p.toString();
+}
 
-// function visualizeVoronoi(svg, field, lo, hi) {
-//   if (hi == undefined) hi = d3.max(field) + 1e-9;
-//   if (lo == undefined) lo = d3.min(field) - 1e-9;
-//   var mappedvals = field.map(function(x) {
-//     return x > hi ? 1 : x < lo ? 0 : (x - lo) / (hi - lo);
-//   });
-//   var tris = svg.selectAll('path.field').data(field.mesh.tris);
-//   tris
-//     .enter()
-//     .append('path')
-//     .classed('field', true);
+function visualizeVoronoi(svg, field: graph, lo: num, hi: num) {
+  if (hi == undefined) hi = d3.max(field) + 1e-9;
+  if (lo == undefined) lo = d3.min(field) - 1e-9;
+  var mappedvals = field.map(function(x) {
+    return x > hi ? 1 : x < lo ? 0 : (x - lo) / (hi - lo);
+  });
+  var tris = svg.selectAll('path.field').data(field.mesh.tris);
+  tris
+    .enter()
+    .append('path')
+    .classed('field', true);
 
-//   tris.exit().remove();
+  tris.exit().remove();
 
-//   svg
-//     .selectAll('path.field')
-//     .attr('d', makeD3Path)
-//     .style('fill', function(d, i) {
-//       return d3.interpolateViridis(mappedvals[i]);
-//     });
-// }
+  svg
+    .selectAll('path.field')
+    .attr('d', makeD3Path)
+    .style('fill', function(d, i: num) {
+      return d3.interpolateViridis(mappedvals[i]);
+    });
+}
 
-// function visualizeDownhill(h) {
-//   var links = getRivers(h, 0.01);
-//   drawPaths('river', links);
-// }
+function visualizeDownhill(h: graph) {
+  var links = getRivers(h, 0.01);
+  drawPaths('river', links);
+}
 
-// function drawPaths(svg, cls, paths) {
-//   var paths = svg.selectAll('path.' + cls).data(paths);
-//   paths
-//     .enter()
-//     .append('path')
-//     .classed(cls, true);
-//   paths.exit().remove();
-//   svg.selectAll('path.' + cls).attr('d', makeD3Path);
-// }
+function drawPaths(svg, cls, paths) {
+  var paths = svg.selectAll('path.' + cls).data(paths);
+  paths
+    .enter()
+    .append('path')
+    .classed(cls, true);
+  paths.exit().remove();
+  svg.selectAll('path.' + cls).attr('d', makeD3Path);
+}
 
-// function visualizeSlopes(svg, render) {
-//   var h = render.h;
-//   var strokes = [];
-//   var r = 0.25 / Math.sqrt(h.length);
-//   for (var i = 0; i < h.length; i++) {
-//     if (h[i] <= 0 || isnearedge(h.mesh, i)) continue;
-//     var nbs = neighbours(h.mesh, i);
-//     nbs.push(i);
-//     var s = 0;
-//     var s2 = 0;
-//     for (var j = 0; j < nbs.length; j++) {
-//       var slopes = trislope(h, nbs[j]);
-//       s += slopes[0] / 10;
-//       s2 += slopes[1];
-//     }
-//     s /= nbs.length;
-//     s2 /= nbs.length;
-//     if (Math.abs(s) < runif(0.1, 0.4)) continue;
-//     var l =
-//       r *
-//       runif(1, 2) *
-//       (1 - 0.2 * Math.pow(Math.atan(s), 2)) *
-//       Math.exp(s2 / 100);
-//     var x = h.mesh.vxs[i][0];
-//     var y = h.mesh.vxs[i][1];
-//     if (Math.abs(l * s) > 2 * r) {
-//       var n = Math.floor(Math.abs((l * s) / r));
-//       l /= n;
-//       if (n > 4) n = 4;
-//       for (var j = 0; j < n; j++) {
-//         var u = rnorm() * r;
-//         var v = rnorm() * r;
-//         strokes.push([
-//           [x + u - l, y + v + l * s],
-//           [x + u + l, y + v - l * s],
-//         ]);
-//       }
-//     } else {
-//       strokes.push([
-//         [x - l, y + l * s],
-//         [x + l, y - l * s],
-//       ]);
-//     }
-//   }
-//   var lines = svg.selectAll('line.slope').data(strokes);
-//   lines
-//     .enter()
-//     .append('line')
-//     .classed('slope', true);
-//   lines.exit().remove();
-//   svg
-//     .selectAll('line.slope')
-//     .attr('x1', function(d) {
-//       return 1000 * d[0][0];
-//     })
-//     .attr('y1', function(d) {
-//       return 1000 * d[0][1];
-//     })
-//     .attr('x2', function(d) {
-//       return 1000 * d[1][0];
-//     })
-//     .attr('y2', function(d) {
-//       return 1000 * d[1][1];
-//     });
-// }
+function visualizeSlopes(svg, render) {
+  var h = render.h;
+  var strokes = [];
+  var r = 0.25 / Math.sqrt(h.length);
+  for (var i = 0; i < h.length; i++) {
+    if (h[i] <= 0 || isnearedge(h.mesh, i)) continue;
+    var nbs = neighbours(h.mesh, i);
+    nbs.push(i);
+    var s = 0;
+    var s2 = 0;
+    for (var j = 0; j < nbs.length; j++) {
+      var slopes = trislope(h, nbs[j]);
+      s += slopes[0] / 10;
+      s2 += slopes[1];
+    }
+    s /= nbs.length;
+    s2 /= nbs.length;
+    if (Math.abs(s) < runif(0.1, 0.4)) continue;
+    var l =
+      r *
+      runif(1, 2) *
+      (1 - 0.2 * Math.pow(Math.atan(s), 2)) *
+      Math.exp(s2 / 100);
+    var x = h.mesh.vxs[i][0];
+    var y = h.mesh.vxs[i][1];
+    if (Math.abs(l * s) > 2 * r) {
+      var n = Math.floor(Math.abs((l * s) / r));
+      l /= n;
+      if (n > 4) n = 4;
+      for (var j = 0; j < n; j++) {
+        var u = rnorm() * r;
+        var v = rnorm() * r;
+        strokes.push([
+          [x + u - l, y + v + l * s],
+          [x + u + l, y + v - l * s],
+        ]);
+      }
+    } else {
+      strokes.push([
+        [x - l, y + l * s],
+        [x + l, y - l * s],
+      ]);
+    }
+  }
+  var lines = svg.selectAll('line.slope').data(strokes);
+  lines
+    .enter()
+    .append('line')
+    .classed('slope', true);
+  lines.exit().remove();
+  svg
+    .selectAll('line.slope')
+    .attr('x1', function(d) {
+      return 1000 * d[0][0];
+    })
+    .attr('y1', function(d) {
+      return 1000 * d[0][1];
+    })
+    .attr('x2', function(d) {
+      return 1000 * d[1][0];
+    })
+    .attr('y2', function(d) {
+      return 1000 * d[1][1];
+    });
+}
 
-// function visualizeContour(h, level) {
-//   level = level || 0;
-//   var links = contour(h, level);
-//   drawPaths('coast', links);
-// }
+function visualizeContour(h: graph, level) {
+  level = level || 0;
+  var links = contour(h, level);
+  drawPaths('coast', links);
+}
 
-// function visualizeBorders(h, cities, n) {
-//   var links = getBorders(h, getTerritories(h, cities, n));
-//   drawPaths('border', links);
-// }
+function visualizeBorders(h: graph, cities, n: num) {
+  var links = getBorders(h, getTerritories(h, cities, n));
+  drawPaths('border', links);
+}
 
-// function visualizeCities(svg, render) {
-//   var cities = render.cities;
-//   var h = render.h;
-//   var n = render.params.nterrs;
+function visualizeCities(svg, render) {
+  var cities = render.cities;
+  var h = render.h;
+  var n = render.params.nterrs;
 
-//   var circs = svg.selectAll('circle.city').data(cities);
-//   circs
-//     .enter()
-//     .append('circle')
-//     .classed('city', true);
-//   circs.exit().remove();
-//   svg
-//     .selectAll('circle.city')
-//     .attr('cx', function(d) {
-//       return 1000 * h.mesh.vxs[d][0];
-//     })
-//     .attr('cy', function(d) {
-//       return 1000 * h.mesh.vxs[d][1];
-//     })
-//     .attr('r', function(d, i) {
-//       return i >= n ? 4 : 10;
-//     })
-//     .style('fill', 'white')
-//     .style('stroke-width', 5)
-//     .style('stroke-linecap', 'round')
-//     .style('stroke', 'black')
-//     .raise();
-// }
+  var circs = svg.selectAll('circle.city').data(cities);
+  circs
+    .enter()
+    .append('circle')
+    .classed('city', true);
+  circs.exit().remove();
+  svg
+    .selectAll('circle.city')
+    .attr('cx', function(d) {
+      return 1000 * h.mesh.vxs[d][0];
+    })
+    .attr('cy', function(d) {
+      return 1000 * h.mesh.vxs[d][1];
+    })
+    .attr('r', function(d, i: num) {
+      return i >= n ? 4 : 10;
+    })
+    .style('fill', 'white')
+    .style('stroke-width', 5)
+    .style('stroke-linecap', 'round')
+    .style('stroke', 'black')
+    .raise();
+}
 
-// function dropEdge(h, p) {
-//   p = p || 4;
-//   var newh = zero(h.mesh);
-//   for (var i = 0; i < h.length; i++) {
-//     var v = h.mesh.vxs[i];
-//     var x = (2.4 * v[0]) / h.mesh.extent.width;
-//     var y = (2.4 * v[1]) / h.mesh.extent.height;
-//     newh[i] =
-//       h[i] -
-//       Math.exp(10 * (Math.pow(Math.pow(x, p) + Math.pow(y, p), 1 / p) - 1));
-//   }
-//   return newh;
-// }
+function dropEdge(h: graph, p) {
+  p = p || 4;
+  var newh = zero(h.mesh);
+  for (var i = 0; i < h.length; i++) {
+    var v = h.mesh.vxs[i];
+    var x = (2.4 * v[0]) / h.mesh.extent.width;
+    var y = (2.4 * v[1]) / h.mesh.extent.height;
+    newh[i] =
+      h[i] -
+      Math.exp(10 * (Math.pow(Math.pow(x, p) + Math.pow(y, p), 1 / p) - 1));
+  }
+  return newh;
+}
 
-// function generateCoast(params) {
-//   var mesh = generateGoodMesh(params.npts, params.extent);
-//   var h = add(
-//     slope(mesh, randomVector(4)),
-//     cone(mesh, runif(-1, -1)),
-//     mountains(mesh, 50)
-//   );
-//   for (var i = 0; i < 10; i++) {
-//     h = relax(h);
-//   }
-//   h = peaky(h);
-//   //h = doErosion(h, runif(0, 0.1), 5);
-//   h = setSeaLevel(h, runif(0.2, 0.6));
-//   //h = fillSinks(h);
-//   h = cleanCoast(h, 3);
-//   return h;
-// }
+function generateCoast(params) {
+  var mesh = generateGoodMesh(params.npts, params.extent);
+  var h = add(
+    slope(mesh, randomVector(4)),
+    cone(mesh, runif(-1, -1)),
+    mountains(mesh, 50)
+  );
+  for (var i = 0; i < 10; i++) {
+    h = relax(h);
+  }
+  h = peaky(h);
+  h = doErosion(h, runif(0, 0.1), 5);
+  h = setSeaLevel(h, runif(0.2, 0.6));
+  h = fillSinks(h);
+  h = cleanCoast(h, 3);
+  return h;
+}
 
-// function terrCenter(h, terr, city, landOnly) {
-//   var x = 0;
-//   var y = 0;
-//   var n = 0;
-//   for (var i = 0; i < terr.length; i++) {
-//     if (terr[i] != city) continue;
-//     if (landOnly && h[i] <= 0) continue;
-//     x += terr.mesh.vxs[i][0];
-//     y += terr.mesh.vxs[i][1];
-//     n++;
-//   }
-//   return [x / n, y / n];
-// }
+function terrCenter(h: graph, terr, city, landOnly) {
+  var x = 0;
+  var y = 0;
+  var n = 0;
+  for (var i = 0; i < terr.length; i++) {
+    if (terr[i] != city) continue;
+    if (landOnly && h[i] <= 0) continue;
+    x += terr.mesh.vxs[i][0];
+    y += terr.mesh.vxs[i][1];
+    n++;
+  }
+  return [x / n, y / n];
+}
 
-// function drawLabels(svg, render) {
-//   var params = render.params;
-//   var h = render.h;
-//   var terr = render.terr;
-//   var cities = render.cities;
-//   var nterrs = render.params.nterrs;
-//   var avoids = [render.rivers, render.coasts, render.borders];
-//   var lang = makeRandomLanguage();
-//   var citylabels = [];
-//   function penalty(label) {
-//     var pen = 0;
-//     if (label.x0 < -0.45 * h.mesh.extent.width) pen += 100;
-//     if (label.x1 > 0.45 * h.mesh.extent.width) pen += 100;
-//     if (label.y0 < -0.45 * h.mesh.extent.height) pen += 100;
-//     if (label.y1 > 0.45 * h.mesh.extent.height) pen += 100;
-//     for (var i = 0; i < citylabels.length; i++) {
-//       var olabel = citylabels[i];
-//       if (
-//         label.x0 < olabel.x1 &&
-//         label.x1 > olabel.x0 &&
-//         label.y0 < olabel.y1 &&
-//         label.y1 > olabel.y0
-//       ) {
-//         pen += 100;
-//       }
-//     }
+function drawLabels(svg, render) {
+  var params = render.params;
+  var h = render.h;
+  var terr = render.terr;
+  var cities = render.cities;
+  var nterrs = render.params.nterrs;
+  var avoids = [render.rivers, render.coasts, render.borders];
+  var lang = makeRandomLanguage();
+  var citylabels = [];
+  function penalty(label) {
+    var pen = 0;
+    if (label.x0 < -0.45 * h.mesh.extent.width) pen += 100;
+    if (label.x1 > 0.45 * h.mesh.extent.width) pen += 100;
+    if (label.y0 < -0.45 * h.mesh.extent.height) pen += 100;
+    if (label.y1 > 0.45 * h.mesh.extent.height) pen += 100;
+    for (var i = 0; i < citylabels.length; i++) {
+      var olabel = citylabels[i];
+      if (
+        label.x0 < olabel.x1 &&
+        label.x1 > olabel.x0 &&
+        label.y0 < olabel.y1 &&
+        label.y1 > olabel.y0
+      ) {
+        pen += 100;
+      }
+    }
 
-//     for (var i = 0; i < cities.length; i++) {
-//       var c = h.mesh.vxs[cities[i]];
-//       if (
-//         label.x0 < c[0] &&
-//         label.x1 > c[0] &&
-//         label.y0 < c[1] &&
-//         label.y1 > c[1]
-//       ) {
-//         pen += 100;
-//       }
-//     }
-//     for (var i = 0; i < avoids.length; i++) {
-//       var avoid = avoids[i];
-//       for (var j = 0; j < avoid.length; j++) {
-//         var avpath = avoid[j];
-//         for (var k = 0; k < avpath.length; k++) {
-//           var pt = avpath[k];
-//           if (
-//             pt[0] > label.x0 &&
-//             pt[0] < label.x1 &&
-//             pt[1] > label.y0 &&
-//             pt[1] < label.y1
-//           ) {
-//             pen++;
-//           }
-//         }
-//       }
-//     }
-//     return pen;
-//   }
-//   for (var i = 0; i < cities.length; i++) {
-//     var x = h.mesh.vxs[cities[i]][0];
-//     var y = h.mesh.vxs[cities[i]][1];
-//     var text = makeName(lang, 'city');
-//     var size = i < nterrs ? params.fontsizes.city : params.fontsizes.town;
-//     var sx = ((0.65 * size) / 1000) * text.length;
-//     var sy = size / 1000;
-//     var posslabels = [
-//       {
-//         x: x + 0.8 * sy,
-//         y: y + 0.3 * sy,
-//         align: 'start',
-//         x0: x + 0.7 * sy,
-//         y0: y - 0.6 * sy,
-//         x1: x + 0.7 * sy + sx,
-//         y1: y + 0.6 * sy,
-//       },
-//       {
-//         x: x - 0.8 * sy,
-//         y: y + 0.3 * sy,
-//         align: 'end',
-//         x0: x - 0.9 * sy - sx,
-//         y0: y - 0.7 * sy,
-//         x1: x - 0.9 * sy,
-//         y1: y + 0.7 * sy,
-//       },
-//       {
-//         x: x,
-//         y: y - 0.8 * sy,
-//         align: 'middle',
-//         x0: x - sx / 2,
-//         y0: y - 1.9 * sy,
-//         x1: x + sx / 2,
-//         y1: y - 0.7 * sy,
-//       },
-//       {
-//         x: x,
-//         y: y + 1.2 * sy,
-//         align: 'middle',
-//         x0: x - sx / 2,
-//         y0: y + 0.1 * sy,
-//         x1: x + sx / 2,
-//         y1: y + 1.3 * sy,
-//       },
-//     ];
-//     var label =
-//       posslabels[
-//         d3.scan(posslabels, function(a, b) {
-//           return penalty(a) - penalty(b);
-//         })
-//       ];
-//     label.text = text;
-//     label.size = size;
-//     citylabels.push(label);
-//   }
-//   var texts = svg.selectAll('text.city').data(citylabels);
-//   texts
-//     .enter()
-//     .append('text')
-//     .classed('city', true);
-//   texts.exit().remove();
-//   svg
-//     .selectAll('text.city')
-//     .attr('x', function(d) {
-//       return 1000 * d.x;
-//     })
-//     .attr('y', function(d) {
-//       return 1000 * d.y;
-//     })
-//     .style('font-size', function(d) {
-//       return d.size;
-//     })
-//     .style('text-anchor', function(d) {
-//       return d.align;
-//     })
-//     .text(function(d) {
-//       return d.text;
-//     })
-//     .raise();
+    for (var i = 0; i < cities.length; i++) {
+      var c = h.mesh.vxs[cities[i]];
+      if (
+        label.x0 < c[0] &&
+        label.x1 > c[0] &&
+        label.y0 < c[1] &&
+        label.y1 > c[1]
+      ) {
+        pen += 100;
+      }
+    }
+    for (var i = 0; i < avoids.length; i++) {
+      var avoid = avoids[i];
+      for (var j = 0; j < avoid.length; j++) {
+        var avpath = avoid[j];
+        for (var k = 0; k < avpath.length; k++) {
+          var pt = avpath[k];
+          if (
+            pt[0] > label.x0 &&
+            pt[0] < label.x1 &&
+            pt[1] > label.y0 &&
+            pt[1] < label.y1
+          ) {
+            pen++;
+          }
+        }
+      }
+    }
+    return pen;
+  }
+  for (var i = 0; i < cities.length; i++) {
+    var x = h.mesh.vxs[cities[i]][0];
+    var y = h.mesh.vxs[cities[i]][1];
+    var text = makeName(lang, 'city');
+    var size = i < nterrs ? params.fontsizes.city : params.fontsizes.town;
+    var sx = ((0.65 * size) / 1000) * text.length;
+    var sy = size / 1000;
+    var posslabels = [
+      {
+        x: x + 0.8 * sy,
+        y: y + 0.3 * sy,
+        align: 'start',
+        x0: x + 0.7 * sy,
+        y0: y - 0.6 * sy,
+        x1: x + 0.7 * sy + sx,
+        y1: y + 0.6 * sy,
+      },
+      {
+        x: x - 0.8 * sy,
+        y: y + 0.3 * sy,
+        align: 'end',
+        x0: x - 0.9 * sy - sx,
+        y0: y - 0.7 * sy,
+        x1: x - 0.9 * sy,
+        y1: y + 0.7 * sy,
+      },
+      {
+        x: x,
+        y: y - 0.8 * sy,
+        align: 'middle',
+        x0: x - sx / 2,
+        y0: y - 1.9 * sy,
+        x1: x + sx / 2,
+        y1: y - 0.7 * sy,
+      },
+      {
+        x: x,
+        y: y + 1.2 * sy,
+        align: 'middle',
+        x0: x - sx / 2,
+        y0: y + 0.1 * sy,
+        x1: x + sx / 2,
+        y1: y + 1.3 * sy,
+      },
+    ];
+    var label =
+      posslabels[
+        d3.scan(posslabels, function(a, b) {
+          return penalty(a) - penalty(b);
+        })
+      ];
+    label.text = text;
+    label.size = size;
+    citylabels.push(label);
+  }
+  var texts = svg.selectAll('text.city').data(citylabels);
+  texts
+    .enter()
+    .append('text')
+    .classed('city', true);
+  texts.exit().remove();
+  svg
+    .selectAll('text.city')
+    .attr('x', function(d) {
+      return 1000 * d.x;
+    })
+    .attr('y', function(d) {
+      return 1000 * d.y;
+    })
+    .style('font-size', function(d) {
+      return d.size;
+    })
+    .style('text-anchor', function(d) {
+      return d.align;
+    })
+    .text(function(d) {
+      return d.text;
+    })
+    .raise();
 
-//   var reglabels = [];
-//   for (var i = 0; i < nterrs; i++) {
-//     var city = cities[i];
-//     var text = makeName(lang, 'region');
-//     var sy = params.fontsizes.region / 1000;
-//     var sx = 0.6 * text.length * sy;
-//     var lc = terrCenter(h, terr, city, true);
-//     var oc = terrCenter(h, terr, city, false);
-//     var best = 0;
-//     var bestscore = -999999;
-//     for (var j = 0; j < h.length; j++) {
-//       var score = 0;
-//       var v = h.mesh.vxs[j];
-//       score -=
-//         3000 *
-//         Math.sqrt(
-//           (v[0] - lc[0]) * (v[0] - lc[0]) + (v[1] - lc[1]) * (v[1] - lc[1])
-//         );
-//       score -=
-//         1000 *
-//         Math.sqrt(
-//           (v[0] - oc[0]) * (v[0] - oc[0]) + (v[1] - oc[1]) * (v[1] - oc[1])
-//         );
-//       if (terr[j] != city) score -= 3000;
-//       for (var k = 0; k < cities.length; k++) {
-//         var u = h.mesh.vxs[cities[k]];
-//         if (Math.abs(v[0] - u[0]) < sx && Math.abs(v[1] - sy / 2 - u[1]) < sy) {
-//           score -= k < nterrs ? 4000 : 500;
-//         }
-//         if (
-//           v[0] - sx / 2 < citylabels[k].x1 &&
-//           v[0] + sx / 2 > citylabels[k].x0 &&
-//           v[1] - sy < citylabels[k].y1 &&
-//           v[1] > citylabels[k].y0
-//         ) {
-//           score -= 5000;
-//         }
-//       }
-//       for (var k = 0; k < reglabels.length; k++) {
-//         var label = reglabels[k];
-//         if (
-//           v[0] - sx / 2 < label.x + label.width / 2 &&
-//           v[0] + sx / 2 > label.x - label.width / 2 &&
-//           v[1] - sy < label.y &&
-//           v[1] > label.y - label.size
-//         ) {
-//           score -= 20000;
-//         }
-//       }
-//       if (h[j] <= 0) score -= 500;
-//       if (v[0] + sx / 2 > 0.5 * h.mesh.extent.width) score -= 50000;
-//       if (v[0] - sx / 2 < -0.5 * h.mesh.extent.width) score -= 50000;
-//       if (v[1] > 0.5 * h.mesh.extent.height) score -= 50000;
-//       if (v[1] - sy < -0.5 * h.mesh.extent.height) score -= 50000;
-//       if (score > bestscore) {
-//         bestscore = score;
-//         best = j;
-//       }
-//     }
-//     reglabels.push({
-//       text: text,
-//       x: h.mesh.vxs[best][0],
-//       y: h.mesh.vxs[best][1],
-//       size: sy,
-//       width: sx,
-//     });
-//   }
-//   texts = svg.selectAll('text.region').data(reglabels);
-//   texts
-//     .enter()
-//     .append('text')
-//     .classed('region', true);
-//   texts.exit().remove();
-//   svg
-//     .selectAll('text.region')
-//     .attr('x', function(d) {
-//       return 1000 * d.x;
-//     })
-//     .attr('y', function(d) {
-//       return 1000 * d.y;
-//     })
-//     .style('font-size', function(d) {
-//       return 1000 * d.size;
-//     })
-//     .style('text-anchor', 'middle')
-//     .text(function(d) {
-//       return d.text;
-//     })
-//     .raise();
-// }
-// function drawMap(svg, render) {
-//   render.rivers = getRivers(render.h, 0.01);
-//   render.coasts = contour(render.h, 0);
-//   render.terr = getTerritories(render);
-//   render.borders = getBorders(render);
-//   drawPaths(svg, 'river', render.rivers);
-//   drawPaths(svg, 'coast', render.coasts);
-//   drawPaths(svg, 'border', render.borders);
-//   visualizeSlopes(svg, render);
-//   visualizeCities(svg, render);
-//   drawLabels(svg, render);
-// }
+  var reglabels = [];
+  for (var i = 0; i < nterrs; i++) {
+    var city = cities[i];
+    var text = makeName(lang, 'region');
+    var sy = params.fontsizes.region / 1000;
+    var sx = 0.6 * text.length * sy;
+    var lc = terrCenter(h, terr, city, true);
+    var oc = terrCenter(h, terr, city, false);
+    var best = 0;
+    var bestscore = -999999;
+    for (var j = 0; j < h.length; j++) {
+      var score = 0;
+      var v = h.mesh.vxs[j];
+      score -=
+        3000 *
+        Math.sqrt(
+          (v[0] - lc[0]) * (v[0] - lc[0]) + (v[1] - lc[1]) * (v[1] - lc[1])
+        );
+      score -=
+        1000 *
+        Math.sqrt(
+          (v[0] - oc[0]) * (v[0] - oc[0]) + (v[1] - oc[1]) * (v[1] - oc[1])
+        );
+      if (terr[j] != city) score -= 3000;
+      for (var k = 0; k < cities.length; k++) {
+        var u = h.mesh.vxs[cities[k]];
+        if (Math.abs(v[0] - u[0]) < sx && Math.abs(v[1] - sy / 2 - u[1]) < sy) {
+          score -= k < nterrs ? 4000 : 500;
+        }
+        if (
+          v[0] - sx / 2 < citylabels[k].x1 &&
+          v[0] + sx / 2 > citylabels[k].x0 &&
+          v[1] - sy < citylabels[k].y1 &&
+          v[1] > citylabels[k].y0
+        ) {
+          score -= 5000;
+        }
+      }
+      for (var k = 0; k < reglabels.length; k++) {
+        var label = reglabels[k];
+        if (
+          v[0] - sx / 2 < label.x + label.width / 2 &&
+          v[0] + sx / 2 > label.x - label.width / 2 &&
+          v[1] - sy < label.y &&
+          v[1] > label.y - label.size
+        ) {
+          score -= 20000;
+        }
+      }
+      if (h[j] <= 0) score -= 500;
+      if (v[0] + sx / 2 > 0.5 * h.mesh.extent.width) score -= 50000;
+      if (v[0] - sx / 2 < -0.5 * h.mesh.extent.width) score -= 50000;
+      if (v[1] > 0.5 * h.mesh.extent.height) score -= 50000;
+      if (v[1] - sy < -0.5 * h.mesh.extent.height) score -= 50000;
+      if (score > bestscore) {
+        bestscore = score;
+        best = j;
+      }
+    }
+    reglabels.push({
+      text: text,
+      x: h.mesh.vxs[best][0],
+      y: h.mesh.vxs[best][1],
+      size: sy,
+      width: sx,
+    });
+  }
+  texts = svg.selectAll('text.region').data(reglabels);
+  texts
+    .enter()
+    .append('text')
+    .classed('region', true);
+  texts.exit().remove();
+  svg
+    .selectAll('text.region')
+    .attr('x', function(d) {
+      return 1000 * d.x;
+    })
+    .attr('y', function(d) {
+      return 1000 * d.y;
+    })
+    .style('font-size', function(d) {
+      return 1000 * d.size;
+    })
+    .style('text-anchor', 'middle')
+    .text(function(d) {
+      return d.text;
+    })
+    .raise();
+}
+function drawMap(svg, render) {
+  render.rivers = getRivers(render.h, 0.01);
+  render.coasts = contour(render.h, 0);
+  render.terr = getTerritories(render);
+  render.borders = getBorders(render);
+  drawPaths(svg, 'river', render.rivers);
+  drawPaths(svg, 'coast', render.coasts);
+  drawPaths(svg, 'border', render.borders);
+  visualizeSlopes(svg, render);
+  visualizeCities(svg, render);
+  drawLabels(svg, render);
+}
 
-// function doMap(svg, params) {
-//   var render = {
-//     params: params,
-//   };
-//   var width = svg.attr('width');
-//   svg.attr('height', (width * params.extent.height) / params.extent.width);
-//   svg.attr(
-//     'viewBox',
-//     (-1000 * params.extent.width) / 2 +
-//       ' ' +
-//       (-1000 * params.extent.height) / 2 +
-//       ' ' +
-//       1000 * params.extent.width +
-//       ' ' +
-//       1000 * params.extent.height
-//   );
-//   svg.selectAll().remove();
-//   render.h = params.generator(params);
-//   placeCities(render);
-//   drawMap(svg, render);
-// }
+function doMap(svg, params) {
+  var render = {
+    params: params,
+  };
+  var width = svg.attr('width');
+  svg.attr('height', (width * params.extent.height) / params.extent.width);
+  svg.attr(
+    'viewBox',
+    (-1000 * params.extent.width) / 2 +
+      ' ' +
+      (-1000 * params.extent.height) / 2 +
+      ' ' +
+      1000 * params.extent.width +
+      ' ' +
+      1000 * params.extent.height
+  );
+  svg.selectAll().remove();
+  render.h = params.generator(params);
+  placeCities(render);
+  drawMap(svg, render);
+}
 
-// var defaultParams = {
-//   extent: defaultSize,
-//   generator: generateCoast,
-//   npts: 16384,
-//   ncities: 15,
-//   nterrs: 5,
-//   fontsizes: {
-//     region: 40,
-//     city: 25,
-//     town: 20,
-//   },
-// };
+var defaultParams = {
+  extent: defaultExtent,
+  generator: generateCoast,
+  npts: 16384,
+  ncities: 15,
+  nterrs: 5,
+  fontsizes: {
+    region: 40,
+    city: 25,
+    town: 20,
+  },
+};
