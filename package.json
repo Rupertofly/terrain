@@ -1,5 +1,5 @@
 {
-  "name": "contourTer",
+  "name": "@rupertofly/contourTer",
   "version": "0.4",
   "description": "version of mewo2s terrain",
   "main": "dist/index.js",
