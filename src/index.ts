@@ -1,2 +1,1 @@
-import * as tr from '../terrain';
-console.log(tr);
+export * from './terrain';
