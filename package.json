@@ -1,8 +1,8 @@
 {
-  "name": "@rupertofly/contourTer",
+  "name": "@rupertofly/contourter",
   "version": "0.4",
   "description": "version of mewo2s terrain",
-  "main": "dist/index.js",
+  "main": "dist/index.ts",
   "types": "dist/index.d.ts",
   "repository": "git@github.com:Rupertofly/terrain.git",
   "author": "Ruby Quail <ruby@rubyquail.design>",

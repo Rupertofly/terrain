@@ -7,14 +7,11 @@
     {
       "type": "node",
       "request": "launch",
+      "stopOnEntry": true,
       "name": "Launch Program",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "program": "${workspaceFolder}/n/a",
-      "outFiles": [
-        "${workspaceFolder}/**/*.js"
-      ]
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/dist/index.js",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
     }
   ]
 }
