@@ -35,8 +35,13 @@ export class Point implements Vector {
    * @param y y coord
    * @param _w graph width
    */
-  constructor(readonly x: num, readonly y: num, _w: num = 0) {
+  constructor(
+    readonly x: num,
+    readonly y: num,
+    _w: num = 0
+  ) {
     this.wid = _w;
+    this[Symbol.iterator] = () => {};
   }
   /**
    * Gets index for point
@@ -57,7 +62,8 @@ export class Point implements Vector {
    */
   static new(x: num, y: num, _w?: num): Point;
   static new(x: Point | num, y?: num, _w: num = 0): Point {
-    if (x instanceof Point) return new Point(x.x, x.y, x.wid);
+    if (x instanceof Point)
+      return new Point(x.x, x.y, x.wid);
     return new Point(x, y, _w);
   }
   /**
@@ -66,6 +72,14 @@ export class Point implements Vector {
    */
   add(b: Point) {
     return Point.new(this.x + b.x, this.y + b.y, this.wid);
+  }
+  valid(h: number) {
+    return (
+      this.x >= 0 &&
+      this.x < this.wid &&
+      this.y >= 0 &&
+      this.y < h
+    );
   }
   /**
    * subtract a point from this point and return the new point
@@ -96,8 +110,13 @@ function fromI(i: num, wid: num) {
  * create a point set for extent
  * @param param0 Extent
  */
-export function generatePoints({ width, height }: Extent = defaultExtent) {
-  const pts: PointSet = range(width * height).map(i => fromI(i, width));
+export function generatePoints({
+  width,
+  height,
+}: Extent = defaultExtent) {
+  const pts: PointSet = range(width * height).map(i =>
+    fromI(i, width)
+  );
   pts.sort((a, b) => a.i - b.i);
   return pts;
 }
@@ -109,5 +128,26 @@ class Graph extends Array<number> {
    * Contains index of all adjacent indexs
    */
   adj: Adjacencies[];
+  constructor(pts: PointSet, ext: Extent) {
+    super(ext.height * ext.width);
+    this.fill(0);
+    this.pts = pts;
+    this.extent = ext;
+    this.adj = this.map((v, i) => {
+      let adj: Adjacencies = new Map();
+      let N = this.pts[i].add(Point.new(0, -1));
+      N.valid(ext.height) && adj.set('N', N.i);
+      let E = this.pts[i].add(Point.new(1, 0));
+      E.valid(ext.height) && adj.set('E', E.i);
+      let S = this.pts[i].add(Point.new(0, 1));
+      S.valid(ext.height) && adj.set('S', S.i);
+      let W = this.pts[i].add(Point.new(-1, 0));
+      W.valid(ext.height) && adj.set('W', W.i);
+      return adj;
+    });
+  }
 }
-function createMesh(pts: PointSet, extent: Extent = defaultExtent) {}
+function createMesh(
+  pts: PointSet,
+  extent: Extent = defaultExtent
+) {}
