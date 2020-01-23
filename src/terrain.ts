@@ -29,32 +29,74 @@ const defaultExtent: Extent = {
  */
 export class Point implements Vector {
   readonly wid?: num;
-  constructor(readonly x: num, readonly y: num, _w?: num = 0) {
-    if (_w !== 0) this.wid = _w;
+  /**
+   * create a new point
+   * @param x x coord
+   * @param y y coord
+   * @param _w graph width
+   */
+  constructor(readonly x: num, readonly y: num, _w: num = 0) {
+    this.wid = _w;
   }
+  /**
+   * Gets index for point
+   */
   get i() {
     return this.wid !== 0 ? this.y * this.wid + this.x : 0;
   }
+  /**
+   * create a copy of a point
+   * @param p point to copy
+   */
   static new(p: Point): Point;
+  /**
+   * create a point from x and y coords
+   * @param x x coord
+   * @param y y coord
+   * @param _w width for point
+   */
   static new(x: num, y: num, _w?: num): Point;
-  static new(x: Point | num, y?: num, _w?: num = 0): Point {
+  static new(x: Point | num, y?: num, _w: num = 0): Point {
     if (x instanceof Point) return new Point(x.x, x.y, x.wid);
     return new Point(x, y, _w);
   }
+  /**
+   * add two points component wise and return a new point
+   * @param b Point to add
+   */
   add(b: Point) {
     return Point.new(this.x + b.x, this.y + b.y, this.wid);
   }
+  /**
+   * subtract a point from this point and return the new point
+   * @param b point to subtract from this point
+   */
   sub(b: Point) {
-    return Point.new(this.x + b.x, this.y + b.y, this.wid);
+    return Point.new(this.x - b.x, this.y - b.y, this.wid);
   }
 }
+/**
+ * get index for coords
+ * @param x x coord
+ * @param y y coord
+ * @param wid graph wid
+ */
 function toI(x: num, y: num, wid: num) {
   return y * wid + x;
 }
+/**
+ * get point from index3
+ * @param i index
+ * @param wid graph wid
+ */
 function fromI(i: num, wid: num) {
-  return Point.new(i % wid, floor(i / wid));
+  return Point.new(i % wid, floor(i / wid), wid);
 }
-function generatePoints({ width, height }: Extent = defaultExtent) {
+/**
+ * create a point set for extent
+ * @param param0 Extent
+ */
+export function generatePoints({ width, height }: Extent = defaultExtent) {
   const pts: PointSet = range(width * height).map(i => fromI(i, width));
   pts.sort((a, b) => a.i - b.i);
   return pts;
@@ -62,6 +104,7 @@ function generatePoints({ width, height }: Extent = defaultExtent) {
 class Mesh {}
 class Graph extends Array<number> {
   pts: PointSet;
+  extent: Extent;
   /**
    * Contains index of all adjacent indexs
    */
