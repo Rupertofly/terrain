@@ -2,6 +2,8 @@ import {
   range,
   ascending,
   quantile as d3quantile,
+  extent,
+  mean,
 } from 'd3';
 
 //#region Types
@@ -9,13 +11,13 @@ interface Extent {
   width: number;
   height: number;
 }
-interface Vector {
+interface vec {
   x: number;
   y: number;
 }
 type num = number;
-type Pts = Vector[];
-type PointSet = Point[];
+type Pts = vec[];
+type PointSet = Vector[];
 type ValueSet = num[];
 type direction = 'N' | 'E' | 'S' | 'W';
 type Adjacencies = Map<direction, num>;
@@ -31,7 +33,7 @@ const defaultExtent: Extent = {
 /**
  * Point Class for mesh
  */
-export class Point implements Vector {
+export class Vector implements vec {
   readonly wid?: num;
   /**
    * create a new point
@@ -57,25 +59,29 @@ export class Point implements Vector {
    * create a copy of a point
    * @param p point to copy
    */
-  static new(p: Point): Point;
+  static new(p: Vector): Vector;
   /**
    * create a point from x and y coords
    * @param x x coord
    * @param y y coord
    * @param _w width for point
    */
-  static new(x: num, y: num, _w?: num): Point;
-  static new(x: Point | num, y?: num, _w: num = 0): Point {
-    if (x instanceof Point)
-      return new Point(x.x, x.y, x.wid);
-    return new Point(x, y, _w);
+  static new(x: num, y: num, _w?: num): Vector;
+  static new(
+    x: Vector | num,
+    y?: num,
+    _w: num = 0
+  ): Vector {
+    if (x instanceof Vector)
+      return new Vector(x.x, x.y, x.wid);
+    return new Vector(x, y, _w);
   }
   /**
    * add two points component wise and return a new point
    * @param b Point to add
    */
-  add(b: Point) {
-    return Point.new(this.x + b.x, this.y + b.y, this.wid);
+  add(b: Vector) {
+    return Vector.new(this.x + b.x, this.y + b.y, this.wid);
   }
   valid(h: number) {
     return (
@@ -89,8 +95,23 @@ export class Point implements Vector {
    * subtract a point from this point and return the new point
    * @param b point to subtract from this point
    */
-  sub(b: Point) {
-    return Point.new(this.x - b.x, this.y - b.y, this.wid);
+  sub(b: Vector) {
+    return Vector.new(this.x - b.x, this.y - b.y, this.wid);
+  }
+  get magnitude() {
+    return Math.sqrt(this.x ** 2 + this.y ** 2);
+  }
+  get normalized() {
+    let m = this.magnitude;
+    return new Vector(this.x / m, this.y / m, this.wid);
+  }
+  get angle() {
+    let a = Math.atan2(this.y, this.x);
+    return a > 0 ? a : TAU + a;
+  }
+  centre(ext: Extent) {
+    const { width: wid, height: hei } = ext;
+    return this.sub(Vector.new(wid / 2, hei / 2, this.wid));
   }
 }
 /**
@@ -108,7 +129,7 @@ function toI(x: num, y: num, wid: num) {
  * @param wid graph wid
  */
 function fromI(i: num, wid: num) {
-  return Point.new(i % wid, floor(i / wid), wid);
+  return Vector.new(i % wid, floor(i / wid), wid);
 }
 /**
  * create a point set for extent
@@ -124,31 +145,61 @@ export function generatePoints({
   pts.sort((a, b) => a.i - b.i);
   return pts;
 }
-class Mesh {}
+type meshFunction = (
+  p: Vector,
+  h: num,
+  i: num,
+  n: Adjacencies
+) => number;
+
 class Graph extends Array<number> {
   pts: PointSet;
   extent: Extent;
+  downhill?: number[];
   /**
    * Contains index of all adjacent indexs
    */
   adj: Adjacencies[];
-  constructor(pts: PointSet, ext: Extent) {
+  constructor(pts: PointSet, ext: Extent);
+  constructor(g: Graph);
+  constructor(a: PointSet | Graph, ext?: Extent) {
+    ext = ext ?? (a as Graph).extent;
     super(ext.height * ext.width);
+    if (a instanceof Graph) {
+      a.map((v, i) => (this[i] = v));
+      this.pts = a.pts;
+      this.adj = a.adj;
+      this.downhill = a.downhill;
+      return this;
+    }
     this.fill(0);
-    this.pts = pts;
+    this.pts = a;
     this.extent = ext;
     this.adj = this.map((v, i) => {
       let adj: Adjacencies = new Map();
-      let N = this.pts[i].add(Point.new(0, -1));
+      let N = this.pts[i].add(Vector.new(0, -1));
       N.valid(ext.height) && adj.set('N', N.i);
-      let E = this.pts[i].add(Point.new(1, 0));
+      let E = this.pts[i].add(Vector.new(1, 0));
       E.valid(ext.height) && adj.set('E', E.i);
-      let S = this.pts[i].add(Point.new(0, 1));
+      let S = this.pts[i].add(Vector.new(0, 1));
       S.valid(ext.height) && adj.set('S', S.i);
-      let W = this.pts[i].add(Point.new(-1, 0));
+      let W = this.pts[i].add(Vector.new(-1, 0));
       W.valid(ext.height) && adj.set('W', W.i);
       return adj;
     });
+  }
+  clone() {
+    return new Graph(this);
+  }
+  meshMap(e: meshFunction) {
+    let out = this.clone();
+    for (let i = 0; i < this.length; i++) {
+      const h = this[i];
+      const p = this.pts[i];
+      const n = this.adj[i];
+      out[i] = e(p, h, i, n);
+    }
+    return out;
   }
 }
 function createMesh(
@@ -180,4 +231,74 @@ function quantile(h: number[], q: number) {
   let sortedHeights: number[] = h.map(v => v);
   sortedHeights.sort(ascending);
   return d3quantile(sortedHeights, q);
+}
+function zero(gr: Graph) {
+  let x = gr.clone();
+  x.forEach((v, i) => (x[i] = 0));
+  return x;
+}
+function slope(m: Graph, direction: Vector) {
+  return m.meshMap(
+    p =>
+      (p.x - m.extent.width / 2) * direction.x +
+      (p.y - m.extent.height / 2) * direction.y
+  );
+}
+function cone(m: Graph, slope: num) {
+  m.meshMap(pt => {
+    let c = pt.centre(m.extent);
+    return Math.pow(c.x ** 2 + c.y ** 2, 0.5) * slope;
+  });
+}
+function map(h: Graph, f: (n: number) => number) {
+  return h.meshMap((p, hei) => f(hei));
+}
+function normalize(h: Graph) {
+  const [lo, hi] = extent(h);
+  return h.meshMap((p, h) => (h - lo) / (hi - lo));
+}
+function peaky(h: Graph) {
+  return map(normalize(h), Math.sqrt);
+}
+function add(...meshes: Graph[]) {
+  const n = meshes[0].length;
+  const out = zero(arguments[0]);
+  for (let [i, mesh] of meshes.entries()) {
+    for (let [j, h] of mesh.entries()) {
+      out[j] += mesh[j];
+    }
+  }
+  return out;
+}
+function mountains(
+  g: Graph,
+  mounts: PointSet,
+  r: number = 0.05
+) {
+  return g.meshMap((pt, hei, i) => {
+    let out = 0;
+    const c = pt.centre(g.extent);
+    for (let m of mounts) {
+      out += Math.pow(
+        Math.exp(
+          -(
+            (c.x - m.x) * (c.x - m.x) +
+            (c.y - m.y) * (c.y - m.y)
+          ) /
+            (2 * r ** 2)
+        ),
+        2
+      );
+      return out;
+    }
+  });
+}
+function relax(h: Graph) {
+  return h.meshMap((p, v, i, n) => {
+    if (n.size < 4) return 0;
+    return mean([...n].map(d => d[1]));
+  });
+}
+function downhill(g: Graph) {
+  if (g.downhill) return g.downhill;
 }
