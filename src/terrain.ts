@@ -1,4 +1,8 @@
-import { range } from 'd3';
+import {
+  range,
+  ascending,
+  quantile as d3quantile,
+} from 'd3';
 
 //#region Types
 interface Extent {
@@ -150,4 +154,30 @@ class Graph extends Array<number> {
 function createMesh(
   pts: PointSet,
   extent: Extent = defaultExtent
-) {}
+) {
+  return new Graph(pts, extent);
+}
+function isEdge(mesh: Graph, i: number) {
+  return mesh.adj[i].size < 4;
+}
+function isNearEdge(mesh: Graph, i: number) {
+  const { x, y } = mesh.pts[i];
+  const { width: w, height: h } = mesh.extent;
+  return (
+    x < 0.2 * w || x > 0.8 * w || y < 0.2 * h || y > 0.8 * h
+  );
+}
+function neighbours(mesh: Graph, i: number) {
+  var nbs: number[] = [];
+  mesh.adj[i].forEach(v => nbs.push(i));
+}
+function distance(mesh: Graph, i: num, j: num) {
+  let p = mesh.pts[i];
+  let q = mesh.pts[j];
+  return Math.sqrt((p.x - q.x) ** 2 + (p.y - q.y) ** 2);
+}
+function quantile(h: number[], q: number) {
+  let sortedHeights: number[] = h.map(v => v);
+  sortedHeights.sort(ascending);
+  return d3quantile(sortedHeights, q);
+}
