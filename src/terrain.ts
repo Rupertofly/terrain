@@ -169,7 +169,6 @@ class Graph extends Array<number> {
       a.map((v, i) => (this[i] = v));
       this.pts = a.pts;
       this.adj = a.adj;
-      this.downhill = a.downhill;
       return this;
     }
     this.fill(0);
@@ -218,9 +217,10 @@ function isNearEdge(mesh: Graph, i: number) {
     x < 0.2 * w || x > 0.8 * w || y < 0.2 * h || y > 0.8 * h
   );
 }
-function neighbours(mesh: Graph, i: number) {
+function getNeighbours(mesh: Graph, i: number) {
   var nbs: number[] = [];
   mesh.adj[i].forEach(v => nbs.push(i));
+  return nbs;
 }
 function distance(mesh: Graph, i: num, j: num) {
   let p = mesh.pts[i];
@@ -299,6 +299,69 @@ function relax(h: Graph) {
     return mean([...n].map(d => d[1]));
   });
 }
-function downhill(g: Graph) {
-  if (g.downhill) return g.downhill;
+function getDownhill(graph: Graph) {
+  if (graph.downhill) return graph.downhill;
+  function downFrom(index: number) {
+    if (isEdge(graph, index)) return -2;
+    let bestIndex = -1;
+    let bestHeight = graph[index];
+    let siteNbs = getNeighbours(graph, index);
+    for (let nb of siteNbs) {
+      if (graph[nb] < bestHeight) {
+        bestHeight = graph[nb];
+        bestIndex = nb;
+      }
+    }
+    return bestIndex;
+  }
+  let downhill: number[] = [];
+  graph.meshMap((p, h, i) => (downhill[i] = downFrom(i)));
+  graph.downhill = downhill;
+  return downhill;
+}
+function findSinks(graph: Graph) {
+  let downhill = getDownhill(graph);
+  let sinkIndexes: number[] = [];
+  for (let index of range(downhill.length)) {
+    let currentNode = index;
+    while (true) {
+      if (isEdge(graph, currentNode)) {
+        sinkIndexes[index] = -2;
+        break;
+      }
+      if (downhill[currentNode] === -1) {
+        sinkIndexes[index] = currentNode;
+        break;
+      }
+      currentNode = downhill[currentNode];
+    }
+  }
+  return sinkIndexes;
+}
+function fillSinks(graph: Graph, epsilon: number = 1e-5) {
+  const infin = 9e6;
+  let newGraph = zero(graph);
+  newGraph.meshMap((p, h, i) =>
+    isNearEdge(graph, i) ? graph[i] : infin
+  );
+  while (true) {
+    let changed = false;
+    for (let index of range(graph.length)) {
+      if (newGraph[index] === graph[index]) continue;
+      let neighbours = getNeighbours(graph, index);
+      for (let nb of neighbours) {
+        if (graph[index] >= newGraph[nb] + epsilon) {
+          newGraph[index] = graph[index];
+          changed = true;
+          break;
+        }
+        let oh = newGraph[nb] + epsilon;
+        if (newGraph[index] > oh && oh > graph[index]) {
+          newGraph[index] = oh;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return newGraph;
+  }
 }
