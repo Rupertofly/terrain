@@ -23,6 +23,12 @@ type direction = 'N' | 'E' | 'S' | 'W';
 type Adjacencies = Map<direction, num>;
 const { PI, floor } = Math;
 const TAU = PI * 2;
+const DirOffsets: Readonly<{ [key in direction]: [num, num] }> = {
+  N: [0, 1],
+  E: [1, 0],
+  S: [0, -1],
+  W: [-1, 0]
+}
 //#endregion
 //#region Defaults
 const defaultExtent: Extent = {
@@ -47,7 +53,7 @@ export class Vector implements vec {
     _w: num = 0
   ) {
     this.wid = _w;
-    this[Symbol.iterator] = () => {};
+    this[Symbol.iterator] = () => { };
   }
   /**
    * Gets index for point
@@ -59,31 +65,31 @@ export class Vector implements vec {
    * create a copy of a point
    * @param p point to copy
    */
-  static new(p: Vector): Vector;
+  static new( p: Vector ): Vector;
   /**
    * create a point from x and y coords
    * @param x x coord
    * @param y y coord
    * @param _w width for point
    */
-  static new(x: num, y: num, _w?: num): Vector;
+  static new( x: num, y: num, _w?: num ): Vector;
   static new(
     x: Vector | num,
     y?: num,
     _w: num = 0
   ): Vector {
-    if (x instanceof Vector)
-      return new Vector(x.x, x.y, x.wid);
-    return new Vector(x, y, _w);
+    if ( x instanceof Vector )
+      return new Vector( x.x, x.y, x.wid );
+    return new Vector( x, y, _w );
   }
   /**
    * add two points component wise and return a new point
    * @param b Point to add
    */
-  add(b: Vector) {
-    return Vector.new(this.x + b.x, this.y + b.y, this.wid);
+  add( b: Vector ) {
+    return Vector.new( this.x + b.x, this.y + b.y, this.wid );
   }
-  valid(h: number) {
+  valid( h: number ) {
     return (
       this.x >= 0 &&
       this.x < this.wid &&
@@ -95,23 +101,23 @@ export class Vector implements vec {
    * subtract a point from this point and return the new point
    * @param b point to subtract from this point
    */
-  sub(b: Vector) {
-    return Vector.new(this.x - b.x, this.y - b.y, this.wid);
+  sub( b: Vector ) {
+    return Vector.new( this.x - b.x, this.y - b.y, this.wid );
   }
   get magnitude() {
-    return Math.sqrt(this.x ** 2 + this.y ** 2);
+    return Math.sqrt( this.x ** 2 + this.y ** 2 );
   }
   get normalized() {
     let m = this.magnitude;
-    return new Vector(this.x / m, this.y / m, this.wid);
+    return new Vector( this.x / m, this.y / m, this.wid );
   }
   get angle() {
-    let a = Math.atan2(this.y, this.x);
+    let a = Math.atan2( this.y, this.x );
     return a > 0 ? a : TAU + a;
   }
-  centre(ext: Extent) {
+  centre( ext: Extent ) {
     const { width: wid, height: hei } = ext;
-    return this.sub(Vector.new(wid / 2, hei / 2, this.wid));
+    return this.sub( Vector.new( wid / 2, hei / 2, this.wid ) );
   }
 }
 /**
@@ -120,7 +126,7 @@ export class Vector implements vec {
  * @param y y coord
  * @param wid graph wid
  */
-function toI(x: num, y: num, wid: num) {
+function toI( x: num, y: num, wid: num ) {
   return y * wid + x;
 }
 /**
@@ -128,21 +134,21 @@ function toI(x: num, y: num, wid: num) {
  * @param i index
  * @param wid graph wid
  */
-function fromI(i: num, wid: num) {
-  return Vector.new(i % wid, floor(i / wid), wid);
+function fromI( i: num, wid: num ) {
+  return Vector.new( i % wid, floor( i / wid ), wid );
 }
 /**
  * create a point set for extent
  * @param param0 Extent
  */
-export function generatePoints({
+export function generatePoints( {
   width,
   height,
-}: Extent = defaultExtent) {
-  const pts: PointSet = range(width * height).map(i =>
-    fromI(i, width)
+}: Extent = defaultExtent ) {
+  const pts: PointSet = range( width * height ).map( i =>
+    fromI( i, width )
   );
-  pts.sort((a, b) => a.i - b.i);
+  pts.sort( ( a, b ) => a.i - b.i );
   return pts;
 }
 type meshFunction = (
@@ -160,43 +166,43 @@ class Graph extends Array<number> {
    * Contains index of all adjacent indexs
    */
   adj: Adjacencies[];
-  constructor(pts: PointSet, ext: Extent);
-  constructor(g: Graph);
-  constructor(a: PointSet | Graph, ext?: Extent) {
-    ext = ext ?? (a as Graph).extent;
-    super(ext.height * ext.width);
-    if (a instanceof Graph) {
-      a.map((v, i) => (this[i] = v));
+  constructor( pts: PointSet, ext: Extent );
+  constructor( g: Graph );
+  constructor( a: PointSet | Graph, ext?: Extent ) {
+    ext = ext ?? ( a as Graph ).extent;
+    super( ext.height * ext.width );
+    if ( a instanceof Graph ) {
+      a.map( ( v, i ) => ( this[i] = v ) );
       this.pts = a.pts;
       this.adj = a.adj;
       return this;
     }
-    this.fill(0);
+    this.fill( 0 );
     this.pts = a;
     this.extent = ext;
-    this.adj = this.map((v, i) => {
+    this.adj = this.map( ( v, i ) => {
       let adj: Adjacencies = new Map();
-      let N = this.pts[i].add(Vector.new(0, -1));
-      N.valid(ext.height) && adj.set('N', N.i);
-      let E = this.pts[i].add(Vector.new(1, 0));
-      E.valid(ext.height) && adj.set('E', E.i);
-      let S = this.pts[i].add(Vector.new(0, 1));
-      S.valid(ext.height) && adj.set('S', S.i);
-      let W = this.pts[i].add(Vector.new(-1, 0));
-      W.valid(ext.height) && adj.set('W', W.i);
+      let N = this.pts[i].add( Vector.new( 0, -1 ) );
+      N.valid( ext.height ) && adj.set( 'N', N.i );
+      let E = this.pts[i].add( Vector.new( 1, 0 ) );
+      E.valid( ext.height ) && adj.set( 'E', E.i );
+      let S = this.pts[i].add( Vector.new( 0, 1 ) );
+      S.valid( ext.height ) && adj.set( 'S', S.i );
+      let W = this.pts[i].add( Vector.new( -1, 0 ) );
+      W.valid( ext.height ) && adj.set( 'W', W.i );
       return adj;
-    });
+    } );
   }
   clone() {
-    return new Graph(this);
+    return new Graph( this );
   }
-  meshMap(e: meshFunction) {
+  meshMap( e: meshFunction ) {
     let out = this.clone();
-    for (let i = 0; i < this.length; i++) {
+    for ( let i = 0; i < this.length; i++ ) {
       const h = this[i];
       const p = this.pts[i];
       const n = this.adj[i];
-      out[i] = e(p, h, i, n);
+      out[i] = e( p, h, i, n );
     }
     return out;
   }
@@ -205,66 +211,66 @@ function createMesh(
   pts: PointSet,
   extent: Extent = defaultExtent
 ) {
-  return new Graph(pts, extent);
+  return new Graph( pts, extent );
 }
-function isEdge(mesh: Graph, i: number) {
+function isEdge( mesh: Graph, i: number ) {
   return mesh.adj[i].size < 4;
 }
-function isNearEdge(mesh: Graph, i: number) {
+function isNearEdge( mesh: Graph, i: number ) {
   const { x, y } = mesh.pts[i];
   const { width: w, height: h } = mesh.extent;
   return (
     x < 0.2 * w || x > 0.8 * w || y < 0.2 * h || y > 0.8 * h
   );
 }
-function getNeighbours(mesh: Graph, i: number) {
+function getNeighbours( mesh: Graph, i: number ) {
   var nbs: number[] = [];
-  mesh.adj[i].forEach(v => nbs.push(i));
+  mesh.adj[i].forEach( v => nbs.push( i ) );
   return nbs;
 }
-function distance(mesh: Graph, i: num, j: num) {
+function distance( mesh: Graph, i: num, j: num ) {
   let p = mesh.pts[i];
   let q = mesh.pts[j];
-  return Math.sqrt((p.x - q.x) ** 2 + (p.y - q.y) ** 2);
+  return Math.sqrt( ( p.x - q.x ) ** 2 + ( p.y - q.y ) ** 2 );
 }
-function quantile(h: number[], q: number) {
-  let sortedHeights: number[] = h.map(v => v);
-  sortedHeights.sort(ascending);
-  return d3quantile(sortedHeights, q);
+function quantile( h: number[], q: number ) {
+  let sortedHeights: number[] = h.map( v => v );
+  sortedHeights.sort( ascending );
+  return d3quantile( sortedHeights, q );
 }
-function zero(gr: Graph) {
+function zero( gr: Graph ) {
   let x = gr.clone();
-  x.forEach((v, i) => (x[i] = 0));
+  x.forEach( ( v, i ) => ( x[i] = 0 ) );
   return x;
 }
-function slope(m: Graph, direction: Vector) {
+function slope( m: Graph, direction: Vector ) {
   return m.meshMap(
     p =>
-      (p.x - m.extent.width / 2) * direction.x +
-      (p.y - m.extent.height / 2) * direction.y
+      ( p.x - m.extent.width / 2 ) * direction.x +
+      ( p.y - m.extent.height / 2 ) * direction.y
   );
 }
-function cone(m: Graph, slope: num) {
-  m.meshMap(pt => {
-    let c = pt.centre(m.extent);
-    return Math.pow(c.x ** 2 + c.y ** 2, 0.5) * slope;
-  });
+function cone( m: Graph, slope: num ) {
+  z = am.meshMap( pt => {
+    let c = pt.centre( m.extent );
+    return Math.pow( c.x ** 2 + c.y ** 2, 0.5 ) * slope;
+  } );
 }
-function map(h: Graph, f: (n: number) => number) {
-  return h.meshMap((p, hei) => f(hei));
+function map( h: Graph, f: ( n: number ) => number ) {
+  return h.meshMap( ( p, hei ) => f( hei ) );
 }
-function normalize(h: Graph) {
-  const [lo, hi] = extent(h);
-  return h.meshMap((p, h) => (h - lo) / (hi - lo));
+function normalize( h: Graph ) {
+  const [lo, hi] = extent( h );
+  return h.meshMap( ( p, h ) => ( h - lo ) / ( hi - lo ) );
 }
-function peaky(h: Graph) {
-  return map(normalize(h), Math.sqrt);
+function peaky( h: Graph ) {
+  return map( normalize( h ), Math.sqrt );
 }
-function add(...meshes: Graph[]) {
+function add( ...meshes: Graph[] ) {
   const n = meshes[0].length;
-  const out = zero(arguments[0]);
-  for (let [i, mesh] of meshes.entries()) {
-    for (let [j, h] of mesh.entries()) {
+  const out = zero( arguments[0] );
+  for ( let [i, mesh] of meshes.entries() ) {
+    for ( let [j, h] of mesh.entries() ) {
       out[j] += mesh[j];
     }
   }
@@ -275,39 +281,39 @@ function mountains(
   mounts: PointSet,
   r: number = 0.05
 ) {
-  return g.meshMap((pt, hei, i) => {
+  return g.meshMap( ( pt, hei, i ) => {
     let out = 0;
-    const c = pt.centre(g.extent);
-    for (let m of mounts) {
+    const c = pt.centre( g.extent );
+    for ( let m of mounts ) {
       out += Math.pow(
         Math.exp(
           -(
-            (c.x - m.x) * (c.x - m.x) +
-            (c.y - m.y) * (c.y - m.y)
+            ( c.x - m.x ) * ( c.x - m.x ) +
+            ( c.y - m.y ) * ( c.y - m.y )
           ) /
-            (2 * r ** 2)
+          ( 2 * r ** 2 )
         ),
         2
       );
       return out;
     }
-  });
+  } );
 }
-function relax(h: Graph) {
-  return h.meshMap((p, v, i, n) => {
-    if (n.size < 4) return 0;
-    return mean([...n].map(d => d[1]));
-  });
+function relax( h: Graph ) {
+  return h.meshMap( ( p, v, i, n ) => {
+    if ( n.size < 4 ) return 0;
+    return mean( [...n].map( d => d[1] ) );
+  } );
 }
-function getDownhill(graph: Graph) {
-  if (graph.downhill) return graph.downhill;
-  function downFrom(index: number) {
-    if (isEdge(graph, index)) return -2;
+function getDownhill( graph: Graph ) {
+  if ( graph.downhill ) return graph.downhill;
+  function downFrom( index: number ) {
+    if ( isEdge( graph, index ) ) return -2;
     let bestIndex = -1;
     let bestHeight = graph[index];
-    let siteNbs = getNeighbours(graph, index);
-    for (let nb of siteNbs) {
-      if (graph[nb] < bestHeight) {
+    let siteNbs = getNeighbours( graph, index );
+    for ( let nb of siteNbs ) {
+      if ( graph[nb] < bestHeight ) {
         bestHeight = graph[nb];
         bestIndex = nb;
       }
@@ -315,21 +321,21 @@ function getDownhill(graph: Graph) {
     return bestIndex;
   }
   let downhill: number[] = [];
-  graph.meshMap((p, h, i) => (downhill[i] = downFrom(i)));
+  graph.meshMap( ( p, h, i ) => ( downhill[i] = downFrom( i ) ) );
   graph.downhill = downhill;
   return downhill;
 }
-function findSinks(graph: Graph) {
-  let downhill = getDownhill(graph);
+function findSinks( graph: Graph ) {
+  let downhill = getDownhill( graph );
   let sinkIndexes: number[] = [];
-  for (let index of range(downhill.length)) {
+  for ( let index of range( downhill.length ) ) {
     let currentNode = index;
-    while (true) {
-      if (isEdge(graph, currentNode)) {
+    while ( true ) {
+      if ( isEdge( graph, currentNode ) ) {
         sinkIndexes[index] = -2;
         break;
       }
-      if (downhill[currentNode] === -1) {
+      if ( downhill[currentNode] === -1 ) {
         sinkIndexes[index] = currentNode;
         break;
       }
@@ -338,30 +344,57 @@ function findSinks(graph: Graph) {
   }
   return sinkIndexes;
 }
-function fillSinks(graph: Graph, epsilon: number = 1e-5) {
+function fillSinks( graph: Graph, epsilon: number = 1e-5 ) {
   const infin = 9e6;
-  let newGraph = zero(graph);
-  newGraph.meshMap((p, h, i) =>
-    isNearEdge(graph, i) ? graph[i] : infin
+  let newGraph = zero( graph );
+  newGraph.meshMap( ( p, h, i ) =>
+    isNearEdge( graph, i ) ? graph[i] : infin
   );
-  while (true) {
+  while ( true ) {
     let changed = false;
-    for (let index of range(graph.length)) {
-      if (newGraph[index] === graph[index]) continue;
-      let neighbours = getNeighbours(graph, index);
-      for (let nb of neighbours) {
-        if (graph[index] >= newGraph[nb] + epsilon) {
+    for ( let index of range( graph.length ) ) {
+      if ( newGraph[index] === graph[index] ) continue;
+      let neighbours = getNeighbours( graph, index );
+      for ( let nb of neighbours ) {
+        if ( graph[index] >= newGraph[nb] + epsilon ) {
           newGraph[index] = graph[index];
           changed = true;
           break;
         }
         let oh = newGraph[nb] + epsilon;
-        if (newGraph[index] > oh && oh > graph[index]) {
+        if ( newGraph[index] > oh && oh > graph[index] ) {
           newGraph[index] = oh;
           changed = true;
         }
       }
     }
-    if (!changed) return newGraph;
+    if ( !changed ) return newGraph;
   }
+}
+function getFlux( graph: Graph ) {
+  let downhill = getDownhill( graph );
+  let indexes: ValueSet = [];
+  let flux = zero( graph );
+  for ( let i of range( graph.length ) ) {
+    indexes[i] = i;
+    flux[i] = 1 / graph.length
+  }
+  indexes.sort( ( a, b ) => graph[b] - graph[a] );
+  for ( let i of range( graph.length ) ) {
+    let j = indexes[i];
+    if ( downhill[j] >= 0 ) flux[downhill[j]] += flux[j];
+  }
+  return flux;
+}
+function pointSlope( graph: Graph, index: num ) {
+  const thisNeighbours = graph.adj[index];
+  const hOffset = ( h: num ) => h - graph[index];
+  const slope = [0, 0];
+
+  thisNeighbours.forEach( ( neighbour, dir ) => {
+    let nH = hOffset( graph[neighbour] );
+    slope[0] += nH * DirOffsets[dir][0]
+    slope[1] += nH * DirOffsets[dir][1]
+  } )
+  return slope;
 }
